@@ -1,0 +1,723 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // {{ campaign.faction_name|upper }}{% endblock %}
+
+{% block nav_home %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── CAMPAIGN-SPECIFIC ─────────────────────────────────────── */
+    .campaign-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 16px;
+    }
+
+    /* Operation header band */
+    .op-header-band {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .op-header-band .op-callsign {
+        flex: 1;
+    }
+
+    .op-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+
+    .op-callsign-name {
+        font-family: var(--font-ui);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: 0.02em;
+    }
+
+    .op-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 6px;
+    }
+
+    .op-meta-item {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+    }
+
+    .op-meta-item strong {
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .op-meta-sep {
+        color: var(--text-dim);
+    }
+
+    .op-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    /* Target roster */
+    .target-row {
+        display: grid;
+        grid-template-columns: 32px 1fr 120px 80px;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(28,37,48,0.6);
+        transition: background 0.12s;
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    .target-row:last-child { border-bottom: none; }
+    .target-row:hover { background: var(--bg-raised); }
+    .target-row:hover .target-name { color: var(--accent-cyan); }
+
+    .target-rank {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-dim);
+        text-align: center;
+    }
+
+    .target-name {
+        font-family: var(--font-body);
+        font-size: 14px;
+        color: var(--text-primary);
+        font-weight: 500;
+        transition: color 0.12s;
+    }
+
+    .target-role {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+        letter-spacing: 0.06em;
+    }
+
+    .target-id {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        text-align: right;
+    }
+
+    .target-level {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-align: right;
+    }
+
+    .campaign-layout .panel {
+        position: relative;
+    }
+
+    .campaign-layout .panel::after {
+        content: '';
+        position: absolute;
+        top: 10px;
+        right: 14px;
+        width: 32px;
+        height: 32px;
+        background: url('/logo.png') no-repeat center center;
+        background-size: contain;
+        opacity: 0.04;
+        pointer-events: none;
+        mix-blend-mode: screen;
+    }
+
+    /* Sidebar intel */
+    .intel-sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+    .intel-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 0;
+        border-bottom: 1px solid rgba(28,37,48,0.6);
+    }
+
+    .intel-row:last-child { border-bottom: none; }
+
+    .intel-key {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .intel-val {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-align: right;
+    }
+
+    .intel-val.highlight { color: var(--color-intel); }
+
+    /* Activity indicator bar */
+    .activity-bar-wrap {
+        height: 3px;
+        background: var(--bg-raised);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 8px;
+    }
+
+    .activity-bar-fill {
+        height: 100%;
+        background: var(--color-intel);
+        border-radius: 2px;
+        transition: width 0.6s ease;
+    }
+
+    /* Empty state */
+    .empty-roster {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 24px;
+        gap: 10px;
+    }
+
+    .empty-roster p {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+        text-align: center;
+    }
+
+    /* ─── MOTION & DEPTH: CAMPAIGN ──────────────────────────────── */
+
+    /* Operation header band — glassmorphism */
+    .op-header-band {
+        background: rgba(11, 16, 22, 0.75) !important;
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        border-color: rgba(58,181,105,0.09) !important;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.022) inset,
+            0 8px 32px rgba(0,0,0,0.45),
+            0 0 0 1px rgba(58,181,105,0.04) !important;
+        animation: panel-slide-in 0.3s ease-out both;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Scanning stripe — teal intel color */
+    @keyframes stripe-scan {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
+    }
+
+    .op-header-band::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        width: 25%; height: 100%;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(77,190,195,0.035) 50%,
+            transparent 100%);
+        animation: stripe-scan 6s ease-in-out infinite;
+        pointer-events: none;
+    }
+
+    /* Target rows */
+    .target-row {
+        transition: background 0.18s, padding-left 0.18s;
+        position: relative;
+    }
+
+    .target-row::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 2px;
+        background: var(--color-intel);
+        transform: scaleY(0);
+        transform-origin: center;
+        transition: transform 0.18s ease;
+    }
+
+    .target-row:hover::before { transform: scaleY(1); }
+
+    .target-row:hover {
+        background: rgba(26,35,48,0.8) !important;
+        padding-left: 18px;
+    }
+
+    .target-name { transition: color 0.18s; }
+
+    /* Staggered target row entrance */
+    @keyframes target-row-in {
+        from { opacity: 0; transform: translateX(-6px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .target-row {
+        animation: target-row-in 0.28s ease-out both;
+    }
+
+    .target-row:nth-child(1)  { animation-delay: 0.08s; }
+    .target-row:nth-child(2)  { animation-delay: 0.12s; }
+    .target-row:nth-child(3)  { animation-delay: 0.16s; }
+    .target-row:nth-child(4)  { animation-delay: 0.20s; }
+    .target-row:nth-child(5)  { animation-delay: 0.24s; }
+    .target-row:nth-child(6)  { animation-delay: 0.27s; }
+    .target-row:nth-child(7)  { animation-delay: 0.29s; }
+    .target-row:nth-child(n+8){ animation-delay: 0.31s; }
+
+    /* Intel sidebar panels stagger */
+    .intel-sidebar > .panel {
+        animation: panel-slide-in 0.35s ease-out both;
+    }
+
+    .intel-sidebar > .panel:nth-child(1) { animation-delay: 0.10s; }
+    .intel-sidebar > .panel:nth-child(2) { animation-delay: 0.18s; }
+    .intel-sidebar > .panel:nth-child(3) { animation-delay: 0.26s; }
+
+    /* Intel rows hover */
+    .intel-row {
+        transition: background 0.15s, padding-left 0.15s;
+        border-radius: 2px;
+    }
+
+    .intel-row:hover {
+        background: rgba(26,35,48,0.5);
+        padding-left: 4px;
+    }
+
+    /* Collection depth bar animated */
+    .activity-bar-fill {
+        transition: width 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        position: relative;
+        overflow: hidden;
+    }
+
+    @keyframes bar-shimmer {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(300%); }
+    }
+
+    .activity-bar-fill::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        width: 30%; height: 100%;
+        background: linear-gradient(90deg,
+            transparent, rgba(255,255,255,0.25), transparent);
+        animation: bar-shimmer 2.5s ease-in-out infinite;
+    }
+
+    /* Metric strip stagger */
+    .metric-grid .metric-cell:nth-child(1) { animation-delay: 0.00s; }
+    .metric-grid .metric-cell:nth-child(2) { animation-delay: 0.06s; }
+    .metric-grid .metric-cell:nth-child(3) { animation-delay: 0.12s; }
+    .metric-grid .metric-cell:nth-child(4) { animation-delay: 0.18s; }
+
+    /* Active surveillance badge pulse — green operational */
+    @keyframes surv-badge-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(58,181,105,0.4), 0 0 8px rgba(58,181,105,0.12); }
+        50%       { box-shadow: 0 0 0 5px rgba(58,181,105,0), 0 0 8px rgba(58,181,105,0.06); }
+    }
+
+    .badge-active {
+        animation: surv-badge-pulse 2.2s ease-in-out infinite;
+    }
+
+    /* Action buttons transition */
+    .op-header-actions .btn {
+        transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    .op-header-actions .btn:hover {
+        transform: translateY(-1px);
+    }
+
+    .op-header-action-form {
+        display: inline;
+        margin: 0;
+    }
+
+    @media (max-width: 1100px) {
+        .campaign-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .op-header-band {
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        .op-header-actions {
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .op-header-actions .btn {
+            flex: 1 1 220px;
+            justify-content: center;
+        }
+
+        .op-header-action-form {
+            flex: 1 1 220px;
+            display: flex;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .op-header-band {
+            gap: 14px;
+            padding: 14px;
+        }
+
+        .op-callsign-name {
+            font-size: 20px;
+        }
+
+        .op-meta {
+            flex-wrap: wrap;
+            gap: 8px 10px;
+        }
+
+        .metric-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .target-row,
+        .target-row:hover {
+            grid-template-columns: 1fr auto;
+            gap: 8px 10px;
+            padding: 10px 12px;
+        }
+
+        .target-row > div:first-child {
+            grid-column: 1 / -1;
+        }
+
+        .target-row > .target-id {
+            grid-column: 1;
+            text-align: left;
+        }
+
+        .target-row > .target-level {
+            grid-column: 2;
+        }
+
+        .target-rank {
+            text-align: left;
+        }
+
+        .intel-sidebar {
+            gap: 12px;
+        }
+
+        .op-header-actions .btn {
+            flex: 1 1 100%;
+        }
+
+        .op-header-action-form {
+            flex: 1 1 100%;
+            width: 100%;
+            display: flex;
+        }
+
+        .target-headers {
+            display: none !important;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .metric-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .op-header-band {
+            padding: 12px;
+        }
+
+        .op-header-actions {
+            gap: 8px;
+        }
+
+        .target-row {
+            grid-template-columns: 1fr;
+        }
+
+        .target-row > div:first-child,
+        .target-row > .target-id,
+        .target-row > .target-level {
+            grid-column: 1 / -1;
+            text-align: left;
+        }
+
+        .target-name {
+            font-size: 13px;
+        }
+
+        .target-role,
+        .target-id,
+        .target-level {
+            font-size: 11px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- BREADCRUMB + PAGE HEADER -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-breadcrumb">
+            <a href="{% url 'home' %}" style="color:var(--text-muted);">INTEL OPS</a>
+            <span>//</span>
+            OPERATION RECORD
+        </div>
+        <div class="page-title">{{ campaign.faction_name }}</div>
+        <div class="page-subtitle">Faction surveillance operation — ID {{ campaign.faction_id }}</div>
+    </div>
+</div>
+
+<!-- OPERATION HEADER BAND -->
+<div class="op-header-band">
+    <div class="op-callsign">
+        <div class="op-label">Operation Status</div>
+        <div class="op-callsign-name">
+            {% if campaign.active %}
+                <span class="badge badge-active">● ACTIVE SURVEILLANCE</span>
+            {% else %}
+                <span class="badge badge-inactive">○ SURVEILLANCE HALTED</span>
+            {% endif %}
+        </div>
+        <div class="op-meta">
+            <span class="op-meta-item">FACTION <strong>{{ campaign.faction_id }}</strong></span>
+            <span class="op-meta-sep">·</span>
+            <span class="op-meta-item"><strong>{{ campaign.member_count }}</strong> TARGETS ENROLLED</span>
+            <span class="op-meta-sep">·</span>
+            <span class="op-meta-item"><strong>{{ campaign.snapshot_count }}</strong> OBSERVATIONS LOGGED</span>
+        </div>
+    </div>
+    <div class="op-header-actions">
+        <a href="{% url 'export_campaign' campaign.id %}" class="btn btn-outline">↓ EXPORT INTEL PACKAGE</a>
+        {% if campaign.active %}
+            <a href="{% url 'stop_campaign' campaign.id %}" class="btn btn-danger">■ HALT SURVEILLANCE</a>
+        {% else %}
+            {% if request.spy_user.is_admin %}
+                <a href="{% url 'start_campaign' campaign.id %}" class="btn btn-success">▶ RESUME SURVEILLANCE</a>
+            {% endif %}
+        {% endif %}
+        {% if request.spy_user.is_admin %}
+        <form class="op-header-action-form" method="post" action="{% url 'delete_campaign' campaign.id %}" onsubmit="return confirm('WARNING: This will permanently delete this operation and all associated target observations. Do you want to proceed?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" style="width: 100%;">🗑 DELETE OPERATION</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- METRICS STRIP -->
+<div class="metric-grid" style="margin-bottom:16px;">
+    <div class="metric-cell">
+        <div class="metric-label">Targets Enrolled</div>
+        <!-- amber: monitoring workload -->
+        <div class="metric-value warn">{{ campaign.member_count }}</div>
+        <div class="metric-sub">active subjects</div>
+        <div class="metric-bar" style="background:var(--color-warn);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Observations Logged</div>
+        <!-- purple: strategic aggregate intel -->
+        <div class="metric-value strategic">{{ campaign.snapshot_count }}</div>
+        <div class="metric-sub">total snapshots</div>
+        <div class="metric-bar" style="background:var(--color-strategic);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Avg Obs / Target</div>
+        <!-- cyan: intel data density -->
+        <div class="metric-value highlight">
+            {% if campaign.member_count and campaign.member_count > 0 %}
+                {{ campaign.snapshot_count|floatformat:0 }}
+            {% else %}
+                0
+            {% endif %}
+        </div>
+        <div class="metric-sub">collection depth</div>
+        <div class="metric-bar" style="background:var(--color-intel);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Operation Phase</div>
+        <div class="metric-value" style="font-size:14px; margin-top:4px;">
+            {% if campaign.active %}
+                <span class="badge badge-active">MONITORING</span>
+            {% else %}
+                <span class="badge badge-inactive">DORMANT</span>
+            {% endif %}
+        </div>
+        <div class="metric-sub">current posture</div>
+        <div class="metric-bar" style="background:{% if campaign.active %}var(--color-active){% else %}var(--color-offline){% endif %};"></div>
+    </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="campaign-layout">
+
+    <!-- TARGET ROSTER -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Target Roster</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+                {{ campaign.member_count }} SUBJECT{% if campaign.member_count != 1 %}S{% endif %}
+            </div>
+        </div>
+
+        <!-- COLUMN HEADERS -->
+        <div class="target-headers" style="display:grid; grid-template-columns:32px 1fr 120px 80px; gap:12px; padding:7px 14px; border-bottom:1px solid var(--border-dim);">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">#</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">Target / Designation</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Role</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Level</div>
+        </div>
+
+        {% if members %}
+            {% for member in members %}
+            <a class="target-row" href="/member/{{ member.id }}/">
+                <div class="target-rank">{{ forloop.counter }}</div>
+                <div>
+                    <div class="target-name">{{ member.name }}</div>
+                    <div class="target-role">UID: {{ member.player_id }}</div>
+                </div>
+                <div class="target-id">
+                    {% if member.position %}
+                        {{ member.position }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="target-level">
+                    {% if member.level %}LVL {{ member.level }}{% else %}—{% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        {% else %}
+            <div class="empty-roster">
+                <p>No targets enrolled in this operation.<br>Faction members will appear after data import.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- INTEL SIDEBAR -->
+    <div class="intel-sidebar">
+
+        <!-- OPERATION INTEL -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Operation Intel</div>
+            </div>
+            <div class="panel-body">
+                <div>
+                    <div class="intel-row">
+                        <span class="intel-key">Faction ID</span>
+                        <!-- cyan: intelligence identifier -->
+                        <span class="intel-val highlight">{{ campaign.faction_id }}</span>
+                    </div>
+                    <div class="intel-row">
+                        <span class="intel-key">Faction Name</span>
+                        <span class="intel-val">{{ campaign.faction_name }}</span>
+                    </div>
+                    <div class="intel-row">
+                        <span class="intel-key">Op Status</span>
+                        <span class="intel-val">
+                            {% if campaign.active %}
+                                <!-- green: operational -->
+                                <span style="color:var(--color-active);">ACTIVE</span>
+                            {% else %}
+                                <span style="color:var(--color-offline);">HALTED</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="intel-row">
+                        <span class="intel-key">Initiated</span>
+                        <span class="intel-val">{{ campaign.started_at|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="intel-row">
+                        <span class="intel-key">Targets</span>
+                        <!-- amber: monitoring workload -->
+                        <span class="intel-val" style="color:var(--color-warn);">{{ campaign.member_count }}</span>
+                    </div>
+                    <div class="intel-row">
+                        <span class="intel-key">Observations</span>
+                        <!-- purple: aggregate intel data -->
+                        <span class="intel-val" style="color:var(--color-strategic);">{{ campaign.snapshot_count }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLLECTION DEPTH -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Collection Depth</div>
+            </div>
+            <div class="panel-body">
+                <div style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-bottom:10px; line-height:1.8;">
+                    Observation density across the enrolled target set.
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">DATA SATURATION</span>
+                        <span style="font-family:var(--font-mono);font-size:10px;color:var(--color-strategic);">
+                            {% if campaign.snapshot_count %}{{ campaign.snapshot_count }}{% else %}0{% endif %} OBS
+                        </span>
+                    </div>
+                    <div class="activity-bar-wrap">
+                        <div class="activity-bar-fill" style="width: {% if campaign.snapshot_count %}{% if campaign.snapshot_count > 1000 %}100{% else %}{{ campaign.snapshot_count|floatformat:0 }}{% endif %}{% else %}0{% endif %}%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EXPORT ACTION -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Intelligence Package</div>
+            </div>
+            <div class="panel-body" style="display:flex; flex-direction:column; gap:8px;">
+                <p style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);line-height:1.7;">
+                    Export all observation data for this operation as a structured JSON intelligence report.
+                </p>
+                <a href="{% url 'export_campaign' campaign.id %}" class="btn btn-outline" style="justify-content:center;">↓ EXPORT INTEL PACKAGE</a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

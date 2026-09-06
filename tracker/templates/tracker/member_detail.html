@@ -1,0 +1,719 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // DOSSIER: {{ member.name|upper }}{% endblock %}
+
+{% block nav_home %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── DOSSIER-SPECIFIC ──────────────────────────────────────── */
+    .dossier-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    /* Subject profile card */
+    .subject-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius-md);
+    }
+
+    .subject-header {
+        padding: 16px;
+        border-bottom: 1px solid var(--border-dim);
+    }
+
+    .subject-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 2px;
+        background: var(--bg-raised);
+        border: 1px solid var(--border-mid);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--accent-steel);
+        margin-bottom: 10px;
+        letter-spacing: 0.04em;
+    }
+
+    .subject-name {
+        font-family: var(--font-ui);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+    }
+
+    .subject-uid {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--text-muted);
+    }
+
+    .subject-fields {
+        padding: 12px 16px;
+    }
+
+    .sf-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 7px 0;
+        border-bottom: 1px solid rgba(28,37,48,0.6);
+        gap: 8px;
+    }
+
+    .sf-row:last-child { border-bottom: none; }
+
+    .sf-key {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        flex-shrink: 0;
+    }
+
+    .sf-val {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-align: right;
+        word-break: break-all;
+    }
+
+    .sf-val.highlight { color: var(--color-intel); }
+
+    /* Activity summary dots */
+    .activity-summary {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-dim);
+    }
+
+    .activity-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .activity-cell {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius-sm);
+        padding: 8px;
+        text-align: center;
+    }
+
+    .activity-cell .ac-val {
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-primary);
+        display: block;
+    }
+
+    .activity-cell .ac-lbl {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-top: 3px;
+        display: block;
+    }
+
+    /* Event log */
+    .event-log {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .event-entry {
+        display: grid;
+        grid-template-columns: 160px 120px 130px 1fr;
+        align-items: center;
+        gap: 16px;
+        padding: 9px 14px;
+        border-bottom: 1px solid rgba(28,37,48,0.5);
+        transition: background 0.1s;
+        font-size: 12px;
+    }
+
+    .event-entry:last-child { border-bottom: none; }
+    .event-entry:hover { background: var(--bg-raised); }
+
+    .event-ts {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+
+    .event-online {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .event-online.online   { color: var(--status-active); }
+    .event-online.offline  { color: var(--text-muted); }
+    .event-online.idle     { color: var(--status-warn); }
+
+    .event-status {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .event-state {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.04em;
+    }
+
+    /* State color coding — each state has a distinct semantic role */
+    .state-okay      { color: var(--text-secondary); }
+    .state-traveling { color: var(--color-travel); }    /* teal: moving */
+    .state-hospital  { color: var(--color-danger); }    /* red: threat/incapacitated */
+    .state-jail      { color: var(--color-warn); }      /* amber: detained/caution */
+    .state-abroad    { color: var(--color-travel); }    /* teal: foreign territory */
+    .state-online    { color: var(--color-active); }    /* green: confirmed active */
+
+    /* Latest state highlight — intel cyan */
+    .event-entry.latest {
+        background: rgba(77, 190, 195, 0.03) !important;
+        border-left: 2px solid var(--color-intel) !important;
+        position: relative;
+    }
+
+    .event-entry.latest .event-ts { color: var(--color-intel); }
+
+    /* Empty event log */
+    .empty-log {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 48px;
+        gap: 10px;
+    }
+
+    .empty-log p {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+    }
+
+    /* Last seen bar */
+    .last-action-display {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+        padding: 10px 14px;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-dim);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .last-action-display span { color: var(--text-muted); }
+
+    /* ─── MOTION & DEPTH: DOSSIER ───────────────────────────────── */
+
+    /* Subject card — glassmorphism */
+    .subject-card {
+        background: rgba(14, 19, 25, 0.8) !important;
+        backdrop-filter: blur(12px) saturate(140%);
+        -webkit-backdrop-filter: blur(12px) saturate(140%);
+        border-color: rgba(78,134,163,0.12) !important;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.022) inset,
+            0 8px 32px rgba(0,0,0,0.45),
+            0 0 0 1px rgba(78,134,163,0.05) !important;
+        animation: panel-slide-in 0.3s ease-out both;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Dossier scanning stripe — intel cyan */
+    @keyframes dossier-scan {
+        0%   { top: -4px; opacity: 0.5; }
+        100% { top: 110%; opacity: 0; }
+    }
+
+    .subject-card::before {
+        content: '';
+        position: absolute;
+        left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg,
+            transparent, rgba(77,190,195,0.25), transparent);
+        animation: dossier-scan 4s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    /* Subject avatar glow on active ops */
+    .subject-avatar {
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .subject-avatar:hover {
+        border-color: var(--accent-steel);
+        box-shadow: 0 0 12px rgba(91,143,168,0.2);
+    }
+
+    /* SF rows hover */
+    .sf-row {
+        transition: background 0.15s, padding-left 0.15s;
+        border-radius: 2px;
+    }
+
+    .sf-row:hover {
+        background: rgba(26,35,48,0.5);
+        padding-left: 4px;
+    }
+
+    /* Activity cells */
+    .activity-cell {
+        transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    }
+
+    .activity-cell:hover {
+        background: rgba(26,35,48,0.8);
+        border-color: var(--border-active);
+        transform: translateY(-1px);
+    }
+
+    /* Latest observation panel glass */
+    .panel {
+        animation: panel-slide-in 0.35s ease-out both;
+    }
+
+    /* Event log rows — staggered + hover */
+    @keyframes event-row-in {
+        from { opacity: 0; transform: translateX(-4px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .event-entry {
+        transition: background 0.15s, border-left-color 0.15s;
+        animation: event-row-in 0.22s ease-out both;
+    }
+
+    /* Only stagger first 20 — rest appear together */
+    .event-entry:nth-child(1)  { animation-delay: 0.03s; }
+    .event-entry:nth-child(2)  { animation-delay: 0.06s; }
+    .event-entry:nth-child(3)  { animation-delay: 0.09s; }
+    .event-entry:nth-child(4)  { animation-delay: 0.12s; }
+    .event-entry:nth-child(5)  { animation-delay: 0.15s; }
+    .event-entry:nth-child(6)  { animation-delay: 0.17s; }
+    .event-entry:nth-child(7)  { animation-delay: 0.19s; }
+    .event-entry:nth-child(8)  { animation-delay: 0.21s; }
+    .event-entry:nth-child(9)  { animation-delay: 0.22s; }
+    .event-entry:nth-child(10) { animation-delay: 0.23s; }
+    .event-entry:nth-child(n+11) { animation-delay: 0.25s; }
+
+    .event-entry:hover {
+        background: rgba(24,34,46,0.8) !important;
+        border-left: 2px solid rgba(77,190,195,0.22);
+    }
+
+    /* Latest entry enhanced */
+    .event-entry.latest {
+        background: rgba(77,190,195,0.035) !important;
+        border-left: 2px solid var(--color-intel) !important;
+        position: relative;
+    }
+
+    /* Latest entry scan flash */
+    @keyframes latest-flash {
+        0%   { opacity: 0.22; }
+        15%  { opacity: 0; }
+        100% { opacity: 0; }
+    }
+
+    .event-entry.latest::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(77,190,195,0.05);
+        animation: latest-flash 2.5s ease-out both;
+        pointer-events: none;
+    }
+
+    /* Last action bar subtle glow */
+    .last-action-display {
+        background: rgba(12,17,23,0.85);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        position: relative;
+        overflow: hidden;
+    }
+
+    @keyframes status-bar-sweep {
+        0%   { transform: translateX(-100%); opacity: 0.5; }
+        100% { transform: translateX(400%); opacity: 0; }
+    }
+
+    .last-action-display::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        width: 20%; height: 100%;
+        background: linear-gradient(90deg,
+            transparent, rgba(77,190,195,0.05), transparent);
+        animation: status-bar-sweep 7s ease-in-out infinite;
+    }
+
+    /* Online status indicator transitions */
+    .event-online { transition: color 0.2s; }
+
+    /* Timestamp dim-to-bright */
+    .event-ts { transition: color 0.2s; }
+
+    .event-entry:hover .event-ts {
+        color: var(--text-secondary);
+    }
+
+    @media (max-width: 1100px) {
+        .event-headers {
+            display: none !important;
+        }
+
+        .dossier-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .subject-card {
+            margin-bottom: 12px;
+        }
+
+        .event-entry,
+        .event-entry.latest {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 12px;
+        }
+
+        .event-entry > div:first-child {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .activity-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .last-action-display {
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .event-entry,
+        .event-entry.latest {
+            grid-template-columns: 1fr;
+            gap: 6px;
+            padding: 10px 12px;
+        }
+
+        .event-entry > div:first-child,
+        .event-online,
+        .event-status,
+        .event-state {
+            grid-column: 1 / -1;
+            text-align: left;
+        }
+
+        .event-ts {
+            white-space: normal;
+        }
+
+        .page-header-right {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .activity-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .subject-header,
+        .subject-fields,
+        .activity-summary,
+        .panel-body {
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+
+        .subject-avatar {
+            width: 40px;
+            height: 40px;
+        }
+
+        .empty-log {
+            padding: 36px 20px;
+        }
+
+        .event-entry,
+        .event-entry.latest {
+            padding: 10px 10px;
+        }
+
+        .last-action-display {
+            font-size: 11px;
+            line-height: 1.5;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-breadcrumb">
+            <a href="{% url 'home' %}" style="color:var(--text-muted);">INTEL OPS</a>
+            <span>//</span>
+            <a href="/campaign/{{ member.campaign.id }}/" style="color:var(--text-muted);">{{ member.campaign.faction_name|upper }}</a>
+            <span>//</span>
+            SUBJECT DOSSIER
+        </div>
+        <div class="page-title">{{ member.name }}</div>
+        <div class="page-subtitle">
+            Surveillance dossier — Target UID {{ member.player_id }}
+        </div>
+    </div>
+    <div class="page-header-right">
+        {% if snapshots %}
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">
+                LAST OBS:
+                <span style="color:var(--text-secondary);">{{ snapshots.0.captured_at|date:"Y-m-d H:i" }} UTC</span>
+            </div>
+        {% endif %}
+        <a href="/campaign/{{ member.campaign.id }}/" class="btn btn-outline">← RETURN TO OPERATION</a>
+    </div>
+</div>
+
+<!-- DOSSIER LAYOUT -->
+<div class="dossier-layout">
+
+    <!-- LEFT: SUBJECT PROFILE -->
+    <div>
+        <div class="subject-card">
+            <div class="subject-header">
+                <div class="subject-avatar">
+                    {{ member.name|slice:":2"|upper }}
+                </div>
+                <div class="subject-name">{{ member.name }}</div>
+                <div class="subject-uid">TARGET UID: {{ member.player_id }}</div>
+            </div>
+
+            <div class="subject-fields">
+                <div class="sf-row">
+                    <span class="sf-key">Player ID</span>
+                    <!-- cyan: intelligence identifier -->
+                    <span class="sf-val highlight">{{ member.player_id }}</span>
+                </div>
+                <div class="sf-row">
+                    <span class="sf-key">Faction</span>
+                    <span class="sf-val">{{ member.campaign.faction_name }}</span>
+                </div>
+                <div class="sf-row">
+                    <span class="sf-key">Faction ID</span>
+                    <span class="sf-val" style="color:var(--color-system);">{{ member.campaign.faction_id }}</span>
+                </div>
+                <div class="sf-row">
+                    <span class="sf-key">Role</span>
+                    <span class="sf-val">
+                        {% if member.position %}{{ member.position }}{% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="sf-row">
+                    <span class="sf-key">Level</span>
+                    <span class="sf-val">
+                        {% if member.level %}{{ member.level }}{% else %}—{% endif %}
+                    </span>
+                </div>
+                <div class="sf-row">
+                    <span class="sf-key">Op Status</span>
+                    <span class="sf-val">
+                        {% if member.campaign.active %}
+                            <span style="color:var(--color-active);">ACTIVE SURV.</span>
+                        {% else %}
+                            <span style="color:var(--color-offline);">HALTED</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="activity-summary">
+                <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-muted);text-transform:uppercase;">Observation Summary</div>
+                <div class="activity-grid">
+                    <div class="activity-cell">
+                        <!-- purple: aggregate/strategic count -->
+                        <span class="ac-val" style="color:var(--color-strategic);">{{ snapshots|length }}</span>
+                        <span class="ac-lbl">Total</span>
+                    </div>
+                    <div class="activity-cell">
+                        <!-- green: online/active observations -->
+                        <span class="ac-val" id="online-count" style="color:var(--color-active);">—</span>
+                        <span class="ac-lbl">Online</span>
+                    </div>
+                    <div class="activity-cell">
+                        <!-- slate: offline/inactive -->
+                        <span class="ac-val" id="offline-count" style="color:var(--color-offline);">—</span>
+                        <span class="ac-lbl">Offline</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Latest status -->
+        {% if snapshots %}
+        <div class="panel" style="margin-top:12px;">
+            <div class="panel-header">
+                <div class="panel-title">Latest Observation</div>
+            </div>
+            <div class="panel-body">
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:10px;letter-spacing:0.06em;">
+                    CAPTURED: {{ snapshots.0.captured_at|date:"Y-m-d H:i:s" }} UTC
+                </div>
+                <div>
+                    <div class="sf-row" style="padding:6px 0;">
+                        <span class="sf-key">Online Status</span>
+                        <span class="sf-val">{{ snapshots.0.online_status|default:"—" }}</span>
+                    </div>
+                    <div class="sf-row" style="padding:6px 0;">
+                        <span class="sf-key">Activity Status</span>
+                        <span class="sf-val">{{ snapshots.0.current_status|default:"—" }}</span>
+                    </div>
+                    <div class="sf-row" style="padding:6px 0;">
+                        <span class="sf-key">Current State</span>
+                        <span class="sf-val">{{ snapshots.0.current_state|default:"—" }}</span>
+                    </div>
+                    <div class="sf-row" style="padding:6px 0; border-bottom:none;">
+                        <span class="sf-key">Last Seen</span>
+                        <span class="sf-val">{{ snapshots.0.last_action_relative|default:"—" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- RIGHT: OBSERVATION EVENT LOG -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Observation Event Log</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+                {{ snapshots|length }} RECORD{% if snapshots|length != 1 %}S{% endif %} (LATEST 100)
+            </div>
+        </div>
+
+        {% if snapshots %}
+
+        <!-- Last action context bar -->
+        <div class="last-action-display">
+            <span>MOST RECENT ACTIVITY:</span>
+            {{ snapshots.0.last_action_relative|default:"Unknown" }}
+            &nbsp;&nbsp;
+            <span>STATUS:</span>
+            {{ snapshots.0.current_status|default:"Unknown" }}
+        </div>
+
+        <!-- COLUMN HEADERS -->
+        <div class="event-headers" style="display:grid; grid-template-columns:160px 120px 130px 1fr; gap:16px; padding:7px 14px; border-bottom:1px solid var(--border-dim);">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">Captured At (UTC)</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">Online Status</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">Activity Status</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;">State / Location</div>
+        </div>
+
+        <div class="event-log" id="event-log">
+            {% for snapshot in snapshots %}
+            <div class="event-entry {% if forloop.first %}latest{% endif %}">
+                <div class="event-ts">{{ snapshot.captured_at|date:"Y-m-d H:i:s" }}</div>
+
+                <div class="event-online
+                    {% if snapshot.online_status == 'Online' %}online
+                    {% elif snapshot.online_status == 'Idle' %}idle
+                    {% else %}offline{% endif %}">
+                    {% if snapshot.online_status == 'Online' %}
+                        ● {{ snapshot.online_status }}
+                    {% elif snapshot.online_status == 'Idle' %}
+                        ◐ {{ snapshot.online_status }}
+                    {% else %}
+                        ○ {{ snapshot.online_status|default:"Offline" }}
+                    {% endif %}
+                </div>
+
+                <div class="event-status">
+                    {{ snapshot.current_status|default:"—" }}
+                </div>
+
+                <div class="event-state
+                    {% if snapshot.current_state %}
+                        {% with state=snapshot.current_state|lower %}
+                            {% if 'travel' in state %}state-traveling
+                            {% elif 'hospital' in state %}state-hospital
+                            {% elif 'jail' in state %}state-jail
+                            {% elif 'abroad' in state %}state-abroad
+                            {% else %}state-okay
+                            {% endif %}
+                        {% endwith %}
+                    {% endif %}">
+                    {{ snapshot.current_state|default:"—" }}
+                    {% if snapshot.last_action_relative %}
+                        <span style="color:var(--text-dim); margin-left:8px;">{{ snapshot.last_action_relative }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+            <div class="empty-log">
+                <p>No observations recorded for this target.<br>Observations will appear once collection scans are executed.</p>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Tally online/offline counts for the summary cells
+    document.addEventListener('DOMContentLoaded', function() {
+        const entries = document.querySelectorAll('.event-online');
+        let online = 0, offline = 0;
+        entries.forEach(el => {
+            if (el.classList.contains('online')) online++;
+            else offline++;
+        });
+        const oc = document.getElementById('online-count');
+        const fc = document.getElementById('offline-count');
+        if (oc) oc.textContent = online;
+        if (fc) fc.textContent = offline;
+    });
+</script>
+{% endblock %}

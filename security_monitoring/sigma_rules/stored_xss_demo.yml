@@ -1,0 +1,20 @@
+title: Stored XSS Detection
+id: 7b34e55e-2f91-4c12-8bb3-93d395a1c0d4
+status: experimental
+description: Detects a stored cross-site scripting payload submitted to the application dispatch endpoint.
+references:
+  - https://cwe.mitre.org/data/definitions/79.html
+author: ThreatLens SOC Team
+date: 2026-09-06
+logsource:
+  category: webserver
+  service: application
+detection:
+  selection:
+    event_type: stored_xss_detected
+  condition: selection
+level: high
+tags:
+  - attack.t1059.007
+  - attack.initial_access
+  - cwe.79

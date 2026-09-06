@@ -1,0 +1,890 @@
+{% extends "tracker/base.html" %}
+{% load static %}
+
+{% block title %}ThreatLens // SOC OPERATIONS CONSOLE{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* SOC Console Specific Styles */
+    .soc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-mid);
+    }
+
+    .soc-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        background: rgba(92, 255, 141, 0.12);
+        color: var(--color-active);
+        padding: 5px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(92, 255, 141, 0.3);
+    }
+
+    /* Metric Grid */
+    .soc-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    @media (max-width: 1024px) {
+        .soc-metric-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .soc-metric-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .soc-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-dim);
+        border-radius: var(--radius-md);
+        padding: 18px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .soc-card-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+
+    .soc-card-value {
+        font-family: var(--font-mono);
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    /* Active Incident Panel */
+    .incident-panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-mid);
+        border-radius: var(--radius-md);
+        margin-bottom: 24px;
+    }
+
+    .incident-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        background: rgba(15, 30, 48, 0.5);
+        border-bottom: 1px solid var(--border-dim);
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .severity-badge {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .sev-critical {
+        background: rgba(255, 93, 122, 0.2);
+        color: var(--color-danger);
+        border: 1px solid var(--color-danger);
+        box-shadow: 0 0 8px rgba(255, 93, 122, 0.3);
+    }
+
+    .sev-high {
+        background: rgba(255, 178, 93, 0.2);
+        color: var(--color-warn);
+        border: 1px solid var(--color-warn);
+    }
+
+    .sev-medium {
+        background: rgba(75, 215, 255, 0.15);
+        color: var(--color-intel);
+        border: 1px solid var(--color-intel);
+    }
+
+    .sev-low {
+        background: rgba(138, 167, 184, 0.15);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-mid);
+    }
+
+    .incident-body {
+        padding: 20px;
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+        .incident-body {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .incident-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px 20px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        margin-bottom: 20px;
+    }
+
+    .meta-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+    }
+
+    .meta-val {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    /* Score Meter */
+    .score-meter-wrap {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 2px;
+        height: 10px;
+        width: 100%;
+        overflow: hidden;
+        border: 1px solid var(--border-dim);
+        margin: 8px 0;
+    }
+
+    .score-meter-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4BD7FF, #FFB25D, #FF5D7A);
+        transition: width 0.4s ease;
+    }
+
+    /* Checklist */
+    .verification-box {
+        background: rgba(92, 255, 141, 0.06);
+        border: 1px solid rgba(92, 255, 141, 0.3);
+        border-radius: var(--radius-sm);
+        padding: 14px 18px;
+        margin-top: 14px;
+    }
+
+    .verify-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 4px 0;
+        border-bottom: 1px solid rgba(92, 255, 141, 0.1);
+    }
+
+    .verify-item:last-child {
+        border-bottom: none;
+    }
+
+    .check-mark {
+        color: var(--color-active);
+        font-weight: bold;
+    }
+
+    /* Sigma Code Block */
+    .yaml-code-block {
+        background: #080d12;
+        border: 1px solid var(--border-mid);
+        border-radius: var(--radius-sm);
+        padding: 14px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: #8FE8FF;
+        overflow-x: auto;
+        line-height: 1.5;
+        white-space: pre-wrap;
+    }
+
+    /* Response Button */
+    .btn-contain {
+        width: 100%;
+        padding: 14px 20px;
+        font-family: var(--font-ui);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        background: var(--color-danger);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: transform 0.15s, box-shadow 0.15s;
+        box-shadow: 0 0 16px rgba(255, 93, 122, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .btn-contain:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 0 24px rgba(255, 93, 122, 0.6);
+    }
+
+    /* Incident Lifecycle Timeline */
+    .timeline-container {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        position: relative;
+        padding-left: 24px;
+        margin-top: 10px;
+    }
+
+    .timeline-container::before {
+        content: '';
+        position: absolute;
+        left: 7px;
+        top: 6px;
+        bottom: 6px;
+        width: 2px;
+        background: rgba(75, 215, 255, 0.2);
+    }
+
+    .timeline-item {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+    }
+
+    .timeline-dot {
+        position: absolute;
+        left: -24px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--color-intel);
+        border: 2px solid #080d12;
+        box-shadow: 0 0 8px rgba(75, 215, 255, 0.5);
+    }
+
+    .timeline-dot.contained {
+        background: var(--color-active);
+        box-shadow: 0 0 8px rgba(92, 255, 141, 0.5);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- SOC TOP BANNER -->
+<div class="soc-header">
+    <div>
+        <div class="page-breadcrumb">
+            <a href="{% url 'home' %}" style="color:var(--text-muted);">INTEL OPS</a>
+            <span>//</span>
+            <span style="color:var(--color-danger);">THREATLENS SOC</span>
+            <span>//</span>
+            AUTOMATION CONSOLE
+        </div>
+        <div class="page-title" style="color:var(--text-primary); display:flex; align-items:center; gap:12px;">
+            THREATLENS SOC
+            <span style="font-size:12px; font-weight:normal; color:var(--text-secondary); font-family:var(--font-mono);">
+                v2.4 // TELEMETRY & INCIDENT RESPONSE
+            </span>
+        </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span class="soc-status-badge">
+            <span class="pulse-dot" style="background:var(--color-active);"></span>
+            <span id="poll-status">LIVE TELEMETRY STREAMING (POLLING 3s)</span>
+        </span>
+    </div>
+</div>
+
+<!-- SOC METRICS -->
+<div class="soc-metric-grid">
+    <div class="soc-card">
+        <div class="soc-card-label">Open Incidents</div>
+        <div class="soc-card-value" style="color:{% if total_open > 0 %}var(--color-warn){% else %}var(--color-active){% endif %};">
+            {{ total_open }}
+        </div>
+    </div>
+    <div class="soc-card">
+        <div class="soc-card-label">Critical Severity</div>
+        <div class="soc-card-value" style="color:var(--color-danger);">
+            {{ critical_count }}
+        </div>
+    </div>
+    <div class="soc-card">
+        <div class="soc-card-label">High Severity</div>
+        <div class="soc-card-value" style="color:var(--color-warn);">
+            {{ high_count }}
+        </div>
+    </div>
+    <div class="soc-card">
+        <div class="soc-card-label">Indicators (IOCs)</div>
+        <div class="soc-card-value" style="color:var(--color-intel);">
+            {{ total_iocs }}
+        </div>
+    </div>
+    <div class="soc-card">
+        <div class="soc-card-label">Contained Threats</div>
+        <div class="soc-card-value" style="color:var(--color-active);">
+            {{ total_contained }}
+        </div>
+    </div>
+</div>
+
+{% if selected_incident %}
+<!-- ACTIVE INCIDENT PANEL -->
+<div class="incident-panel">
+    <div class="incident-header">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <span class="severity-badge sev-{{ selected_incident.severity|lower }}">
+                {{ selected_incident.severity }}
+            </span>
+            <span style="font-family:var(--font-mono); font-size:15px; font-weight:600; color:var(--text-primary);">
+                #TL-INC-{{ selected_incident.id }}: {{ selected_incident.title }}
+            </span>
+            {% if selected_incident.is_contained %}
+                <span class="badge badge-active" style="background:rgba(92,255,141,0.15); color:var(--color-active); border:1px solid var(--color-active);">
+                    ✔ CONTAINED
+                </span>
+            {% else %}
+                <span class="badge badge-danger" style="background:rgba(255,93,122,0.15); color:var(--color-danger); border:1px solid var(--color-danger);">
+                    ● ACTIVE INCIDENT
+                </span>
+            {% endif %}
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center;">
+            <a href="{% url 'xss_demo' %}" target="_blank" class="btn btn-outline btn-inline" style="font-size:11px; padding:4px 10px;">
+                View Affected Page ↗
+            </a>
+        </div>
+    </div>
+
+    <div class="incident-body">
+        <!-- LEFT: Incident Investigation Details -->
+        <div>
+            <div class="incident-meta-grid">
+                <div>
+                    <div class="meta-label">Attack Type</div>
+                    <div class="meta-val">{{ selected_incident.attack_type }}</div>
+                </div>
+                <div>
+                    <div class="meta-label">Source Origin IP</div>
+                    <div class="meta-val" style="color:var(--color-intel);">{{ selected_incident.source_ip }}</div>
+                </div>
+                <div>
+                    <div class="meta-label">Endpoint Target</div>
+                    <div class="meta-val">/dispatch/</div>
+                </div>
+                <div>
+                    <div class="meta-label">Telemetry Timestamp</div>
+                    <div class="meta-val">{{ selected_incident.created_at|date:"Y-m-d H:i:s" }} UTC</div>
+                </div>
+                <div>
+                    <div class="meta-label">Matched Sigma Detection</div>
+                    <div class="meta-val" style="color:var(--color-warn);">{{ selected_incident.matched_sigma_rule|default:"Stored XSS Detection" }}</div>
+                </div>
+                <div>
+                    <div class="meta-label">Correlated IOC Count</div>
+                    <div class="meta-val">{{ iocs|length }} Extracted Indicators</div>
+                </div>
+            </div>
+
+            {% if selected_incident.event %}
+            <div style="margin-top:14px; background:rgba(0,0,0,0.25); padding:14px; border-radius:var(--radius-sm); border:1px solid var(--border-dim);">
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);text-transform:uppercase;margin-bottom:10px;">
+                    Request Telemetry
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 20px;font-family:var(--font-mono);font-size:11px;">
+                    <div><span class="meta-label">HTTP Method</span><div class="meta-val">{{ selected_incident.event.method }}</div></div>
+                    <div><span class="meta-label">Request Path</span><div class="meta-val">{{ selected_incident.event.path }}</div></div>
+                    <div style="grid-column:1/-1;"><span class="meta-label">User-Agent</span><div class="meta-val" style="word-break:break-all;">{{ selected_incident.event.user_agent|default:"Unavailable" }}</div></div>
+                    {% if selected_incident.event.query_string %}
+                    <div style="grid-column:1/-1;"><span class="meta-label">Query String</span><div class="meta-val" style="word-break:break-all;color:var(--color-intel);">{{ selected_incident.event.query_string }}</div></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Detection Section (Section 13) -->
+            <div style="margin-top:14px; background:rgba(0,0,0,0.25); padding:14px; border-radius:var(--radius-sm); border:1px solid var(--border-dim);">
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;">
+                    <span>Detection Engine Analysis</span>
+                    <span class="badge badge-active" style="font-size:9px;">AUTOMATED RULE ENGINE</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px 20px;font-family:var(--font-mono);font-size:11px;">
+                    <div>
+                        <span class="meta-label">Detection Engine</span>
+                        <div class="meta-val" style="color:var(--color-intel);">ThreatLens Heuristic & Signature Engine v2.4</div>
+                    </div>
+                    <div>
+                        <span class="meta-label">Sigma Detection Rule</span>
+                        <div class="meta-val" style="color:var(--color-warn);">{{ selected_incident.matched_sigma_rule|default:"Stored XSS Detection" }}</div>
+                    </div>
+                    <div>
+                        <span class="meta-label">Matched Signatures</span>
+                        <div class="meta-val" style="color:var(--color-danger);">
+                            {% if selected_incident.event.matched_signatures %}
+                                {{ selected_incident.event.matched_signatures|join:", " }}
+                            {% else %}
+                                stored_xss_detected, html_event_handler
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="meta-label">Sigma Result</span>
+                        <div class="meta-val" style="color:var(--color-active);">
+                            MATCHED (Level: {{ selected_incident.sigma_details.primary_rule.level|default:"HIGH" }})
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Risk Score Explanation -->
+            <div style="margin-top: 14px; background:rgba(0,0,0,0.25); padding:14px; border-radius:var(--radius-sm); border:1px solid var(--border-dim);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--text-secondary);">
+                        Calculated Exploit Risk Score:
+                    </span>
+                    <strong style="font-family:var(--font-mono); font-size:14px; color:{% if selected_incident.risk_score >= 80 %}var(--color-danger){% elif selected_incident.risk_score >= 60 %}var(--color-warn){% else %}var(--color-intel){% endif %};">
+                        {{ selected_incident.risk_score }} / 100 [{{ selected_incident.severity }}]
+                    </strong>
+                </div>
+                <div class="score-meter-wrap">
+                    <div class="score-meter-fill" style="width: {{ selected_incident.risk_score }}%;"></div>
+                </div>
+                
+                <div style="margin-top: 8px;">
+                    <div style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted); margin-bottom:4px;">
+                        Score Rationale & Rules Triggered:
+                    </div>
+                    {% for item in selected_incident.risk_breakdown %}
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); display:flex; justify-content:space-between; padding:2px 0;">
+                        <span>• {{ item.rule }}: <span style="color:var(--text-muted);">{{ item.description }}</span></span>
+                        <span style="color:var(--color-warn); font-weight:600;">+{{ item.points }} pts</span>
+                    </div>
+                    {% empty %}
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                        Calculated through automated heuristic evaluation.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Forensic Payload Snippet -->
+            {% if selected_incident.payload %}
+            <div style="margin-top: 16px;">
+                <div style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">
+                    Forensic Payload Artifact Captured:
+                </div>
+                <div style="background:#05090c; border:1px solid var(--border-dim); border-radius:var(--radius-sm); padding:10px 12px; font-family:var(--font-mono); font-size:11px; color:#5CFF8D; word-break:break-all;">
+                    {{ selected_incident.payload }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- RIGHT: Human-in-the-Loop Action Panel -->
+        <div style="display:flex; flex-direction:column; justify-content:space-between; background:rgba(10,20,35,0.4); border-left:1px solid var(--border-dim); padding-left:20px;">
+            <div>
+                <div style="font-family:var(--font-mono); font-size:11px; letter-spacing:0.12em; color:var(--text-muted); text-transform:uppercase; margin-bottom:10px;">
+                    Response Action Center
+                </div>
+
+                {% if not selected_incident.is_contained %}
+                    <p style="font-size:12px; color:var(--text-secondary); margin-bottom:16px; line-height:1.5;">
+                        Threat telemetry is confirmed. To mitigate the stored injection vulnerability, execute database containment to delete the malicious surveillance request and rendering records from the database. The incident retains forensic evidence.
+                    </p>
+
+                    <form method="post" action="{% url 'take_action' selected_incident.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-contain" onclick="return confirm('Authorize Incident Response: Contain threat and delete malicious surveillance request / rendering records from database?');">
+                            🛡️ TAKE ACTION
+                        </button>
+                    </form>
+                    <div style="font-size:10px; font-family:var(--font-mono); color:var(--text-muted); text-align:center; margin-top:8px;">
+                        Requires Admin Operative Authorization (POST / CSRF Validated)
+                    </div>
+                {% else %}
+                    <!-- CONTAINED CHECKLIST (Section 18) -->
+                    <div class="verification-box">
+                        <div style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--color-active); margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                            🟢 THREAT CONTAINED & VERIFIED
+                        </div>
+                        <div class="verify-item">
+                            <span>Payload active:</span>
+                            {% if rendering_state.is_compromised %}
+                            <strong style="color:var(--color-danger);">YES ({{ rendering_state.active_payload_count }} active)</strong>
+                            {% else %}
+                            <strong style="color:var(--color-active);">NO</strong>
+                            {% endif %}
+                        </div>
+                        <div class="verify-item">
+                            <span>Active rendering record:</span>
+                            {% if rendering_state.is_compromised %}
+                            <strong style="color:var(--color-danger);">FOUND IN DATABASE</strong>
+                            {% else %}
+                            <strong style="color:var(--color-active);">NOT FOUND</strong>
+                            {% endif %}
+                        </div>
+                        <div class="verify-item">
+                            <span>Containment status:</span>
+                            {% if rendering_state.is_compromised %}
+                            <strong style="color:var(--color-warn);">DELETION REQUIRED ⚠️</strong>
+                            {% else %}
+                            <strong style="color:var(--color-active);">VERIFIED ✓</strong>
+                            {% endif %}
+                        </div>
+                        <div class="verify-item">
+                            <span>Detection Pipeline</span>
+                            <span class="check-mark">✓</span>
+                        </div>
+                        <div class="verify-item">
+                            <span>IOC Extraction</span>
+                            <span class="check-mark">✓</span>
+                        </div>
+                        <div class="verify-item">
+                            <span>Local TI Enrichment</span>
+                            <span class="check-mark">✓</span>
+                        </div>
+                        <div class="verify-item">
+                            <span>Sigma Rule Match</span>
+                            <span class="check-mark">✓</span>
+                        </div>
+                        <div class="verify-item">
+                            <span>Surveillance Request Record</span>
+                            {% if rendering_state.active_surveillance_requests_count %}
+                            <strong style="color:var(--color-danger); font-size:11px;">STILL IN DB</strong>
+                            {% else %}
+                            <span class="check-mark">✓ DELETED</span>
+                            {% endif %}
+                        </div>
+                        <div class="verify-item">
+                            <span>Malicious Record Deleted</span>
+                            {% if rendering_state.is_compromised %}
+                            <strong style="color:var(--color-danger); font-size:11px;">PENDING</strong>
+                            {% else %}
+                            <span class="check-mark">✓</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if selected_incident.action_result %}
+                    <div style="margin-top:12px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); background:rgba(0,0,0,0.3); padding:8px 10px; border-radius:2px;">
+                        {{ selected_incident.action_result }}
+                    </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+
+            <!-- Database Rendering State Live Monitor -->
+            <div style="margin-top: 24px; padding-top:14px; border-top:1px solid var(--border-dim);">
+                <div style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">
+                    Active Database Rendering Path:
+                </div>
+                {% if rendering_state.is_compromised %}
+                    <div style="font-family:var(--font-mono); font-size:12px; color:var(--color-danger); display:flex; align-items:center; gap:6px;">
+                        <span class="pulse-dot" style="background:var(--color-danger);"></span>
+                        {{ rendering_state.active_payload_count }} Active Payload(s) Rendering
+                    </div>
+                    {% if rendering_state.active_surveillance_requests_count %}
+                    <div style="margin-top: 8px; font-family:var(--font-mono); font-size:11px; color:#ffb3ba; background:rgba(255,59,48,0.15); border:1px solid rgba(255,59,48,0.3); border-radius:3px; padding:6px 10px;">
+                        ⚠️ <strong>{{ rendering_state.active_surveillance_requests_count }} Malicious Request(s) in Surveillance Table</strong>
+                        <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+                            Payload cannot be deactivated until this request is deleted from database via TAKE ACTION.
+                        </div>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div style="font-family:var(--font-mono); font-size:12px; color:var(--color-active); display:flex; align-items:center; gap:6px;">
+                        <span class="pulse-dot" style="background:var(--color-active);"></span>
+                        0 Active Payloads (Rendering Clean)
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- INCIDENT EVENT TIMELINE PANEL (Section 13) -->
+{% if timeline_milestones %}
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <div class="panel-title" style="color: var(--color-intel);">
+            Incident Lifecycle & Telemetry Timeline
+        </div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+            OBSERVED EVENT MILESTONES // ISO CHRONOLOGY
+        </div>
+    </div>
+    <div style="padding: 18px 24px;">
+        <div class="timeline-container">
+            {% for item in timeline_milestones %}
+            <div class="timeline-item">
+                <span class="timeline-dot {% if item.status == 'CONTAINED' %}contained{% endif %}"></span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--color-intel); font-size:10px; font-weight:700;">[{{ item.step }}]</span>
+                    <strong style="color: var(--text-primary);">{{ item.label }}</strong>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">
+                        {{ item.timestamp }}
+                    </span>
+                    <span class="badge badge-active" style="font-size:9px; padding:2px 6px;">
+                        {{ item.status }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% else %}
+<div class="panel" style="padding:40px; text-align:center;">
+    <div style="font-family:var(--font-mono); font-size:14px; color:var(--color-active); margin-bottom:8px;">
+        ✔ ZERO ACTIVE THREATS DETECTED
+    </div>
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:16px;">
+        The security automation pipeline is actively monitoring inbound application telemetry.
+    </div>
+    <a href="{% url 'xss_demo' %}" class="btn btn-outline btn-inline">
+        Open Target Surveillance Page →
+    </a>
+</div>
+{% endif %}
+
+<!-- EXTRACTED & ENRICHED IOC TABLE -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <div class="panel-title" style="color: var(--color-intel);">
+            Extracted Indicators of Compromise (IOCs) & Threat Intelligence
+        </div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+            PARSED, NORMALIZED & DETERMINISTICALLY ENRICHED
+        </div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>TYPE</th>
+                <th>OBSERVED / NORMALIZED VALUE</th>
+                <th>STATUS</th>
+                <th>REPUTATION</th>
+                <th>CONFIDENCE</th>
+                <th>THREAT ENRICHMENT CONTEXT</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ioc in iocs %}
+            <tr>
+                <td style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">
+                    {{ ioc.ioc_type }}
+                </td>
+                <td style="font-family:var(--font-mono); font-size:12px; color:var(--text-primary);">
+                    <div>{{ ioc.normalized_value }}</div>
+                    {% if ioc.value != ioc.normalized_value %}
+                        <div style="font-size:10px; color:var(--text-dim);">Observed: {{ ioc.value|truncatechars:60 }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge" style="font-size:9px; background:rgba(75,215,255,0.1); color:var(--color-intel);">
+                        {{ ioc.enrichment.status|default:"Enriched" }}
+                    </span>
+                </td>
+                <td>
+                    {% if ioc.reputation == "MALICIOUS" %}
+                        <span class="badge" style="background:rgba(255,93,122,0.2); color:var(--color-danger); border:1px solid var(--color-danger);">
+                             MALICIOUS
+                        </span>
+                    {% elif ioc.reputation == "SUSPICIOUS" %}
+                        <span class="badge" style="background:rgba(255,178,93,0.2); color:var(--color-warn); border:1px solid var(--color-warn);">
+                            SUSPICIOUS
+                        </span>
+                    {% elif ioc.reputation == "CLEAN" %}
+                        <span class="badge" style="background:rgba(92,255,141,0.2); color:var(--color-active); border:1px solid var(--color-active);">
+                            CLEAN
+                        </span>
+                    {% else %}
+                        <span class="badge" style="background:rgba(138,167,184,0.2); color:var(--text-muted);">
+                            UNKNOWN
+                        </span>
+                    {% endif %}
+                </td>
+                <td style="font-family:var(--font-mono); font-size:12px;">
+                    {{ ioc.confidence }}%
+                </td>
+                <td style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">
+                    <div>{{ ioc.enrichment.source|default:"Local Feed" }}</div>
+                    {% if ioc.enrichment.asn %}
+                        <div style="font-size:10px; color:var(--text-dim);">{{ ioc.enrichment.asn }}</div>
+                    {% endif %}
+                    {% if ioc.enrichment.threat_actor and ioc.enrichment.threat_actor != "N/A" %}
+                        <div style="font-size:10px; color:var(--color-danger);">Actor: {{ ioc.enrichment.threat_actor }}</div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" style="text-align:center; padding:24px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                    No IOCs currently extracted for this incident.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- SIGMA RULE DETECTION SECTION -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <div class="panel-title" style="color: var(--color-warn);">
+            Sigma Detection Rule [YAML]
+        </div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+            PARSED & VALIDATED FILESYSTEM RULE
+        </div>
+    </div>
+
+    <div style="padding:16px 20px;">
+        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">
+            The SOC pipeline evaluates standard Sigma YAML detection rules loaded directly from <code style="color:var(--color-intel);">security_monitoring/sigma_rules/</code>:
+        </div>
+        <div class="yaml-code-block">{{ sigma_yaml }}</div>
+    </div>
+</div>
+
+<!-- INCIDENT HISTORY LOG -->
+{% if all_incidents|length > 1 %}
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">Incident Audit History</div>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>INCIDENT ID</th>
+                <th>TITLE</th>
+                <th>SEVERITY</th>
+                <th>SCORE</th>
+                <th>STATUS</th>
+                <th>TIMESTAMP</th>
+                <th style="text-align:right;">ACTION</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inc in all_incidents %}
+            <tr>
+                <td style="font-family:var(--font-mono); color:var(--color-intel);">#TL-INC-{{ inc.id }}</td>
+                <td style="font-weight:500;">{{ inc.title }}</td>
+                <td>
+                    <span class="severity-badge sev-{{ inc.severity|lower }}">{{ inc.severity }}</span>
+                </td>
+                <td style="font-family:var(--font-mono);">{{ inc.risk_score }} / 100</td>
+                <td>
+                    {% if inc.status == "CONTAINED" %}
+                        <span class="badge badge-active">✔ CONTAINED</span>
+                    {% else %}
+                        <span class="badge badge-danger">● OPEN</span>
+                    {% endif %}
+                </td>
+                <td style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">
+                    {{ inc.created_at|date:"Y-m-d H:i:s" }}
+                </td>
+                <td style="text-align:right;">
+                    <a href="?incident_id={{ inc.id }}" class="btn btn-outline btn-inline" style="font-size:10px; padding:3px 8px;">
+                        Inspect
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (function() {
+        const currentIncidentId = {% if selected_incident %}{{ selected_incident.id }}{% else %}null{% endif %};
+        const currentCompromised = {% if rendering_state.is_compromised %}true{% else %}false{% endif %};
+        const statusIndicator = document.getElementById("poll-status");
+
+        let isPolling = false;
+
+        async function checkLiveTelemetry() {
+            if (isPolling) return;
+            isPolling = true;
+
+            try {
+                const res = await fetch("{% url 'soc_poll' %}", {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    credentials: "same-origin"
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+
+                    // Check if a new incident was created while SOC is open
+                    if (data.latest_incident_id && currentIncidentId !== data.latest_incident_id) {
+                        if (statusIndicator) {
+                            statusIndicator.textContent = "NEW TELEMETRY DETECTED // UPDATING...";
+                            statusIndicator.style.color = "var(--color-warn)";
+                        }
+                        // Refresh to show newly detected attack
+                        setTimeout(() => {
+                            window.location.href = "{% url 'soc_dashboard' %}?incident_id=" + data.latest_incident_id;
+                        }, 500);
+                        return;
+                    }
+
+                    // Check if containment state changed
+                    if (data.is_compromised !== currentCompromised) {
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 500);
+                        return;
+                    }
+                }
+            } catch (err) {
+                // Silently ignore network interruptions during presentation
+            } finally {
+                isPolling = false;
+            }
+        }
+
+        // Live polling every 3 seconds (Section 15)
+        setInterval(checkLiveTelemetry, 3000);
+    })();
+</script>
+{% endblock %}
+

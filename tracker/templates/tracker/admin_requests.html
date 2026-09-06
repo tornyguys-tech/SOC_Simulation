@@ -1,0 +1,204 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // ADMIN PORTAL{% endblock %}
+
+{% block nav_admin_requests %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── ADMIN-SPECIFIC ────────────────────────────────────────── */
+    .admin-requests-header {
+        display: grid;
+        grid-template-columns: 180px 140px 140px 1fr;
+        gap: 16px;
+        padding: 7px 14px;
+        border-bottom: 1px solid var(--border-dim);
+    }
+
+    .admin-requests-row {
+        display: grid;
+        grid-template-columns: 180px 140px 140px 1fr;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-dim);
+    }
+
+    @media (max-width: 900px) {
+        .admin-requests-header,
+        .admin-requests-row {
+            grid-template-columns: 1.2fr 1fr 1fr 1.2fr;
+            gap: 12px;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .admin-requests-header {
+            display: none;
+        }
+
+        .admin-requests-row {
+            grid-template-columns: 1fr auto;
+            gap: 8px 10px;
+            padding: 12px;
+        }
+
+        .admin-requests-row > div:first-child {
+            grid-column: 1 / -1;
+        }
+
+        .admin-requests-row > div:nth-child(2) {
+            grid-column: 1;
+        }
+
+        .admin-requests-row > div:nth-child(3) {
+            grid-column: 2;
+            text-align: right !important;
+        }
+
+        .admin-requests-row > div:nth-child(4) {
+            grid-column: 1 / -1;
+            justify-content: flex-start !important;
+            text-align: left !important;
+            margin-top: 6px;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .admin-requests-row > div:nth-child(4) {
+            display: flex;
+            width: 100%;
+        }
+        
+        .admin-requests-row > div:nth-child(4) form {
+            flex: 1;
+        }
+        
+        .admin-requests-row > div:nth-child(4) button {
+            width: 100% !important;
+            justify-content: center !important;
+            text-align: center !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- BREADCRUMB + PAGE HEADER -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-breadcrumb">
+            <a href="{% url 'home' %}" style="color:var(--text-muted);">INTEL OPS</a>
+            <span>//</span>
+            ADMIN PORTAL
+        </div>
+        <div class="page-title">Surveillance Request Panel</div>
+        <div class="page-subtitle">Review and authorize target faction monitoring requests</div>
+    </div>
+</div>
+
+{% if error %}
+    <div class="alert alert-danger" style="margin-bottom:16px;">
+        <span class="alert-label">[ERR]</span>
+        <span>{{ error }}</span>
+    </div>
+{% endif %}
+
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- PENDING REQUESTS PANEL -->
+    <div class="panel">
+        <div class="panel-header" style="position: relative; overflow: hidden;">
+            <div class="panel-title" style="color: var(--color-warn);">Pending Requests</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+                {{ pending_requests|length }} PENDING
+            </div>
+        </div>
+        
+        <!-- COLUMN HEADERS -->
+        <div class="admin-requests-header">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Player (Requestor)</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Faction ID</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Date Submitted</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Actions</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0;">
+            {% if pending_requests %}
+                {% for r in pending_requests %}
+                <div class="admin-requests-row">
+                    <div style="font-family:var(--font-mono); font-size:13px; font-weight:500;">
+                        {{ r.user.player_name }} <span style="font-size: 11px; color: var(--text-muted);">({{ r.user.player_id }})</span>
+                    </div>
+                    <div style="font-family:var(--font-mono); font-size:14px; color: var(--color-intel);">
+                        {{ r.faction_id|safe }}
+                    </div>
+                    <div style="font-family:var(--font-mono); font-size:12px; color:var(--text-secondary); text-align:right;">
+                        {{ r.created_at|date:"Y-m-d H:i" }}
+                    </div>
+                    <div style="text-align:right; display:flex; justify-content:flex-end; gap:8px;">
+                        <form method="post" action="{% url 'approve_request' r.id %}" style="display:inline; margin:0;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-inline" style="padding: 4px 12px; font-size: 11px; height: auto;">[Approve]</button>
+                        </form>
+                        <form method="post" action="{% url 'reject_request' r.id %}" style="display:inline; margin:0;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-inline" style="padding: 4px 12px; font-size: 11px; height: auto;">[Reject]</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 36px 20px; text-align:center; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                    No pending surveillance requests.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- HISTORICAL LOG PANEL -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Reviewed Requests (Log)</div>
+        </div>
+        
+        <!-- COLUMN HEADERS -->
+        <div class="admin-requests-header">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Player</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Faction ID</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Date Reviewed</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Final Status</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0;">
+            {% if reviewed_requests %}
+                {% for r in reviewed_requests %}
+                <div class="admin-requests-row">
+                    <div style="font-family:var(--font-mono); font-size:13px; color:var(--text-secondary);">
+                        {{ r.user.player_name }}
+                    </div>
+                    <div style="font-family:var(--font-mono); font-size:13px;">
+                        {{ r.faction_id }}
+                    </div>
+                    <div style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim); text-align:right;">
+                        {{ r.reviewed_at|date:"Y-m-d H:i" }}
+                    </div>
+                    <div style="text-align:right;">
+                        {% if r.status == "APPROVED" %}
+                            <span class="badge badge-active">✔ APPROVED</span>
+                        {% else %}
+                            <span class="badge badge-danger">✖ REJECTED</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 24px; text-align:center; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                    No historical review log found.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}

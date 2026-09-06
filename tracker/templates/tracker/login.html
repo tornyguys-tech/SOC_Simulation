@@ -1,0 +1,198 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // SECURE ACCESS{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── LOGIN PAGE ────────────────────────────────────────────── */
+
+    /* Override page-wrap padding to prevent forced overflow */
+    .page-wrap {
+        padding: 8px 16px !important;
+        min-height: calc(100vh - 72px - 45px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Centered wrapper */
+    .login-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        padding: 4px 0;
+    }
+
+    /* Card */
+    .login-container {
+        width: 100%;
+        max-width: 470px;
+        background: rgba(14, 19, 25, 0.94);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        border: 1px solid rgba(77, 190, 195, 0.13);
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.025) inset,
+            0 12px 40px rgba(0,0,0,0.5),
+            0 0 0 1px rgba(77,190,195,0.04);
+        border-radius: var(--radius-md);
+        padding: 22px 32px 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        animation: panel-slide-in 0.4s ease-out both;
+        text-align: center;
+    }
+
+    /* Logo — enlarged, crisp, and balanced */
+    .login-logo {
+        height: 150px;
+        width: auto;
+        max-width: 225px;
+        display: block;
+        margin: 0 auto 12px;
+        filter: drop-shadow(0 2px 18px rgba(77, 190, 195, 0.25));
+        transition: filter 0.3s ease, transform 0.3s ease;
+        mix-blend-mode: normal;
+    }
+
+    .login-logo:hover {
+        filter: drop-shadow(0 2px 24px rgba(77, 190, 195, 0.42));
+        transform: scale(1.02);
+    }
+
+    /* Divider under logo */
+    .login-logo-sep {
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(77,190,195,0.2) 30%,
+            var(--border-dim) 60%,
+            transparent 100%);
+        margin-bottom: 10px;
+    }
+
+    .login-subtitle {
+        font-family: var(--font-ui);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        color: var(--color-intel);
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+
+    .login-tagline {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-dim);
+        width: 100%;
+    }
+
+    .login-tagline span { color: var(--color-intel); }
+
+    .login-form-container {
+        width: 100%;
+        text-align: left;
+    }
+
+    .login-hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.45;
+        margin-bottom: 12px;
+        padding-left: 10px;
+        border-left: 2px solid var(--border-active);
+    }
+
+    /* Compact viewports / smaller laptop screens */
+    @media (max-height: 640px) {
+        .page-wrap {
+            padding: 4px 12px !important;
+        }
+        .login-container {
+            padding: 16px 26px 16px;
+            max-width: 440px;
+        }
+        .login-logo {
+            height: 120px;
+            margin-bottom: 8px;
+        }
+        .login-logo-sep {
+            margin-bottom: 8px;
+        }
+        .login-tagline {
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+        }
+        .login-hint {
+            margin-bottom: 8px;
+            font-size: 10px;
+        }
+        .field-group {
+            margin-bottom: 10px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-wrapper">
+    <div class="login-container">
+
+        <!-- LOGO — centered, properly proportioned -->
+        <img src="/logo.png" alt="TornSpy" class="login-logo">
+
+        <div class="login-logo-sep"></div>
+
+        <!-- BRANDING -->
+        <div class="login-subtitle">Faction Intelligence Platform</div>
+
+        <!-- TAGLINE -->
+        <div class="login-tagline">
+            Observe. &middot; Analyze. &middot; <span>Dominate.</span>
+        </div>
+
+        <div class="login-form-container">
+            {% if error %}
+                <div class="alert alert-danger" style="margin-bottom: 14px;">
+                    <span class="alert-label">[ERR]</span>
+                    <span>{{ error }}</span>
+                </div>
+            {% endif %}
+
+            <div class="login-hint">
+                Authentication requires a public Torn API key. If this is your first time logging in, a new operative profile will be registered automatically.
+            </div>
+
+            <form method="post" action="{% url 'login' %}">
+                {% csrf_token %}
+                <div class="field-group" style="margin-bottom: 14px;">
+                    <label for="api_key" style="margin-bottom: 6px;">Public API Key</label>
+                    <input
+                        id="api_key"
+                        name="api_key"
+                        type="text"
+                        placeholder="Enter your Torn API key"
+                        required
+                        autofocus
+                    >
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; height:40px; font-weight:600; letter-spacing:0.12em;">
+                    ▶ ACCESS PLATFORM
+                </button>
+            </form>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+title: Suspicious Payload Submission
+id: c4b19d44-77e8-4672-9114-6b9432f99312
+status: experimental
+description: Detects a suspicious POST submission to the application dispatch endpoint.
+references:
+  - https://attack.mitre.org/tactics/TA0001/
+author: ThreatLens SOC Team
+date: 2026-09-06
+logsource:
+  category: webserver
+  service: application
+detection:
+  selection:
+    method: POST
+    path|startswith: /dispatch/
+  condition: selection
+level: medium
+tags:
+  - attack.initial_access

@@ -1,0 +1,694 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // INTEL OPS CENTER{% endblock %}
+
+{% block nav_home %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── HOME-SPECIFIC ─────────────────────────────────────────── */
+    .ops-grid {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 16px;
+    }
+
+    /* Operations list */
+    .ops-list { display: flex; flex-direction: column; gap: 0; }
+
+    .op-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-dim);
+        transition: background 0.12s;
+        cursor: pointer;
+        text-decoration: none;
+        color: inherit;
+        position: relative;
+    }
+
+    .op-row::after {
+        content: '';
+        position: absolute;
+        top: 8px;
+        right: 16px;
+        width: 32px;
+        height: 32px;
+        background: url('/logo.png') no-repeat center center;
+        background-size: contain;
+        opacity: 0.04;
+        pointer-events: none;
+        mix-blend-mode: screen;
+    }
+
+    .op-row:last-child { border-bottom: none; }
+
+    .op-row:hover { background: var(--bg-raised); }
+
+    .op-row:hover .op-name { color: var(--accent-cyan); }
+
+    .op-id {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 3px;
+    }
+
+    .op-name {
+        font-family: var(--font-ui);
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        transition: color 0.12s;
+    }
+
+    .op-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+    }
+
+    .op-stat-val {
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .op-stat-lbl {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    /* Empty state */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 24px;
+        gap: 12px;
+    }
+
+    .empty-icon {
+        width: 40px;
+        height: 40px;
+        border: 1px solid var(--border-mid);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-dim);
+        font-size: 16px;
+    }
+
+    .empty-state p {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+        text-align: center;
+    }
+
+    /* Right sidebar */
+    .sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+    /* Initiate form */
+    .initiate-panel .panel-body {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .field-hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+        letter-spacing: 0.06em;
+    }
+
+    .submit-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .submit-row .btn { flex: 1; justify-content: center; }
+
+    /* System status panel */
+    .sys-status-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .sys-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(28,37,48,0.6);
+    }
+
+    .sys-row:last-child { border-bottom: none; }
+
+    .sys-key {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .sys-val {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .sys-val.ok   { color: var(--status-active); }
+    .sys-val.warn { color: var(--status-warn); }
+
+    /* ─── MOTION & DEPTH: HOME ──────────────────────────────────── */
+
+    /* Initiate panel glassmorphism */
+    .initiate-panel {
+        background: rgba(14, 19, 25, 0.78) !important;
+        backdrop-filter: blur(10px) saturate(130%);
+        -webkit-backdrop-filter: blur(10px) saturate(130%);
+        border-color: rgba(78, 134, 163, 0.12) !important;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.022) inset,
+            0 8px 32px rgba(0,0,0,0.4),
+            0 0 0 1px rgba(78,134,163,0.05) !important;
+    }
+
+    /* Operation row hover */
+    .op-row {
+        position: relative;
+        transition: background 0.2s, padding-left 0.2s;
+    }
+
+    .op-row::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 2px;
+        background: var(--color-intel);
+        transform: scaleY(0);
+        transform-origin: center;
+        transition: transform 0.2s ease;
+    }
+
+    .op-row:hover::before {
+        transform: scaleY(1);
+    }
+
+    .op-row:hover {
+        background: rgba(26, 35, 48, 0.8) !important;
+        padding-left: 18px;
+    }
+
+    .op-name {
+        transition: color 0.2s, letter-spacing 0.2s;
+    }
+
+    .op-row:hover .op-name {
+        letter-spacing: 0.02em;
+    }
+
+    /* Op row staggered entrance */
+    @keyframes op-row-in {
+        from { opacity: 0; transform: translateX(-8px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .ops-list .op-row {
+        animation: op-row-in 0.3s ease-out both;
+    }
+
+    .ops-list .op-row:nth-child(1)  { animation-delay: 0.05s; }
+    .ops-list .op-row:nth-child(2)  { animation-delay: 0.10s; }
+    .ops-list .op-row:nth-child(3)  { animation-delay: 0.15s; }
+    .ops-list .op-row:nth-child(4)  { animation-delay: 0.20s; }
+    .ops-list .op-row:nth-child(5)  { animation-delay: 0.25s; }
+    .ops-list .op-row:nth-child(6)  { animation-delay: 0.28s; }
+    .ops-list .op-row:nth-child(7)  { animation-delay: 0.30s; }
+    .ops-list .op-row:nth-child(n+8){ animation-delay: 0.32s; }
+
+    /* Active badge pulse ring — green operational */
+    @keyframes badge-ring-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(58,181,105,0.4), 0 0 7px rgba(58,181,105,0.1); }
+        50%       { box-shadow: 0 0 0 4px rgba(58,181,105,0), 0 0 7px rgba(58,181,105,0.06); }
+    }
+
+    .op-row .badge-active {
+        animation: badge-ring-pulse 2.5s ease-in-out infinite;
+    }
+
+    /* Metric grid stagger */
+    .metric-grid .metric-cell {
+        animation: panel-slide-in 0.35s ease-out both;
+    }
+
+    .metric-grid .metric-cell:nth-child(1) { animation-delay: 0.0s; }
+    .metric-grid .metric-cell:nth-child(2) { animation-delay: 0.06s; }
+    .metric-grid .metric-cell:nth-child(3) { animation-delay: 0.12s; }
+    .metric-grid .metric-cell:nth-child(4) { animation-delay: 0.18s; }
+
+    /* Sidebar stagger */
+    .sidebar > * {
+        animation: panel-slide-in 0.35s ease-out both;
+    }
+
+    .sidebar > *:nth-child(1) { animation-delay: 0.1s; }
+    .sidebar > *:nth-child(2) { animation-delay: 0.18s; }
+
+    /* System status rows */
+    @keyframes sys-row-in {
+        from { opacity: 0; transform: translateX(6px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .sys-row {
+        animation: sys-row-in 0.25s ease-out both;
+        transition: background 0.15s;
+    }
+
+    .sys-row:hover { background: rgba(26,35,48,0.4); border-radius: 2px; }
+
+    .sys-row:nth-child(1) { animation-delay: 0.20s; }
+    .sys-row:nth-child(2) { animation-delay: 0.25s; }
+    .sys-row:nth-child(3) { animation-delay: 0.30s; }
+    .sys-row:nth-child(4) { animation-delay: 0.35s; }
+    .sys-row:nth-child(5) { animation-delay: 0.40s; }
+
+    /* Data refresh sweep on the ops panel header */
+    @keyframes header-sweep {
+        0%   { background-position: -200% center; }
+        100% { background-position: 200% center; }
+    }
+
+    .panel .panel-header::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(77,190,195,0.2) 50%,
+            transparent 100%);
+        background-size: 200% 100%;
+        animation: header-sweep 5s ease-in-out infinite;
+        opacity: 0.5;
+    }
+
+    .panel .panel-header { overflow: hidden; }
+
+    @media (max-width: 1100px) {
+        .ops-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .sidebar .panel:first-child {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .op-headers {
+            display: none !important;
+        }
+
+        .ops-grid {
+            gap: 14px;
+        }
+
+        .op-row,
+        .op-row:hover {
+            padding: 12px;
+        }
+
+        .op-row {
+            grid-template-columns: 1fr auto;
+            gap: 10px 12px;
+        }
+
+        .op-row > div:first-child {
+            grid-column: 1 / -1;
+        }
+
+        .op-row > .op-stat:nth-of-type(1) {
+            grid-column: 1;
+            align-items: flex-start;
+        }
+
+        .op-row > .op-stat:nth-of-type(2) {
+            grid-column: 2;
+            align-items: flex-end;
+        }
+
+        .op-row > div:last-child {
+            grid-column: 1 / -1;
+            justify-self: flex-start;
+        }
+
+        .op-stat {
+            flex-direction: row;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .sidebar {
+            grid-template-columns: 1fr;
+        }
+
+        .submit-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .submit-row .btn {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .op-row {
+            grid-template-columns: 1fr;
+        }
+
+        .op-row > div:first-child,
+        .op-row > .op-stat:nth-of-type(1),
+        .op-row > .op-stat:nth-of-type(2),
+        .op-row > div:last-child {
+            grid-column: 1 / -1;
+        }
+
+        .op-stat {
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .op-stat-val {
+            font-size: 14px;
+        }
+
+        .op-name {
+            font-size: 13px;
+        }
+
+        .empty-state {
+            padding: 36px 18px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-breadcrumb">
+            TriNetra <span>//</span> INTELLIGENCE OPERATIONS CENTER
+        </div>
+        <div class="page-title">Welcome, {{ request.spy_user.player_name }}</div>
+        <div class="page-subtitle">Operative ID: {{ request.spy_user.player_id }} // Faction surveillance monitoring</div>
+    </div>
+</div>
+
+<!-- AGGREGATE METRICS -->
+<div class="metric-grid" style="margin-bottom: 16px;">
+    <div class="metric-cell">
+        <div class="metric-label">{% if request.spy_user.is_admin %}Active Operations{% else %}Your Operations{% endif %}</div>
+        <div class="metric-value active">{{ active_count }}</div>
+        <div class="metric-sub">{{ campaigns|length }} total operations</div>
+        <!-- green bar: operational status -->
+        <div class="metric-bar" style="background: var(--color-active);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Targets Enrolled</div>
+        <!-- amber: targets represent monitoring workload -->
+        <div class="metric-value warn">{{ total_members }}</div>
+        <div class="metric-sub">across all operations</div>
+        <div class="metric-bar" style="background: var(--color-warn);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Total Observations</div>
+        <!-- purple: strategic/aggregate intelligence data -->
+        <div class="metric-value strategic">{{ total_snapshots }}</div>
+        <div class="metric-sub">snapshots collected</div>
+        <div class="metric-bar" style="background: var(--color-strategic);"></div>
+    </div>
+    <div class="metric-cell">
+        <div class="metric-label">Collection System</div>
+        <div class="metric-value" style="font-size:14px; margin-top:4px;">
+            <span class="badge badge-active">● ONLINE</span>
+        </div>
+        <div class="metric-sub" id="last-scan-ts">awaiting scan</div>
+        <!-- steel blue: system status -->
+        <div class="metric-bar" style="background: var(--color-system);"></div>
+    </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="ops-grid">
+
+    <!-- LEFT: OPERATIONS LIST -->
+    <div>
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">{% if request.spy_user.is_admin %}Global Operation Index{% else %}Your Assigned Operations{% endif %}</div>
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+                    {{ campaigns|length }} RECORD{% if campaigns|length != 1 %}S{% endif %}
+                </div>
+            </div>
+
+            <!-- COLUMN HEADERS -->
+            <div class="op-headers" style="display:grid; grid-template-columns:1fr auto auto auto; gap:16px; padding:7px 14px; border-bottom:1px solid var(--border-dim);">
+                <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Faction / Operation</div>
+                <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Targets</div>
+                <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Obs.</div>
+                <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Status</div>
+            </div>
+
+            <div class="ops-list">
+                {% if campaigns %}
+                    {% for campaign in campaigns %}
+                    <a class="op-row" href="{% url 'campaign_detail' campaign.id %}">
+                        <div>
+                            <div class="op-id">FACTION ID: {{ campaign.faction_id }}</div>
+                            <div class="op-name">{{ campaign.faction_name }}</div>
+                        </div>
+                        <div class="op-stat">
+                            <!-- amber: targets = subjects under monitoring -->
+                            <div class="op-stat-val" style="color:var(--color-warn);">{{ campaign.member_count }}</div>
+                            <div class="op-stat-lbl">Targets</div>
+                        </div>
+                        <div class="op-stat">
+                            <!-- purple: observations = intelligence data collected -->
+                            <div class="op-stat-val" style="color:var(--color-strategic);">{{ campaign.snapshot_count }}</div>
+                            <div class="op-stat-lbl">Obs.</div>
+                        </div>
+                        <div>
+                            {% if campaign.active %}
+                                <span class="badge badge-active">● Active</span>
+                            {% else %}
+                                <span class="badge badge-inactive">○ Halted</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">⊕</div>
+                        <p>No operations initiated.<br>{% if request.spy_user.is_admin %}Designate a faction ID to begin surveillance.{% else %}Submit a faction request to begin surveillance.{% endif %}</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if not request.spy_user.is_admin %}
+        <div class="panel" style="margin-top: 16px;">
+            <div class="panel-header" style="position: relative; overflow: hidden;">
+                <div class="panel-title">Recent Requests</div>
+                <a href="{% url 'requests_list' %}" style="font-family:var(--font-mono); font-size:10px; color:var(--accent-cyan); position: relative; z-index: 2;">View All / Submit Request</a>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0;">
+                {% if user_requests %}
+                    {% for r in user_requests %}
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--border-dim);">
+                        <span style="font-family:var(--font-mono); font-size:12px; font-weight: 500;">Faction ID: {{ r.faction_id }}</span>
+                        <div>
+                            {% if r.status == "PENDING" %}
+                                <span class="badge badge-warn">● PENDING</span>
+                            {% elif r.status == "APPROVED" %}
+                                <span class="badge badge-active">✔ APPROVED</span>
+                            {% else %}
+                                <span class="badge badge-danger">✖ REJECTED</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="padding: 24px; text-align:center; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                        No recent surveillance requests.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- RIGHT: SIDEBAR -->
+    <div class="sidebar">
+
+        <!-- INITIATE OPERATION -->
+        {% if request.spy_user.is_admin %}
+        <div class="panel initiate-panel">
+            <div class="panel-header">
+                <div class="panel-title">Initiate Operation</div>
+            </div>
+            <div class="panel-body">
+                {% if error %}
+                    <div class="alert alert-danger">
+                        <span class="alert-label">[ERR]</span>
+                        <span>{{ error }}</span>
+                    </div>
+                {% endif %}
+
+                <form method="post" action="{% url 'create_campaign' %}">
+                    {% csrf_token %}
+                    <div class="form-row" style="margin-bottom:12px;">
+                        <label for="faction_id">Target Faction ID</label>
+                        <input
+                            id="faction_id"
+                            name="faction_id"
+                            type="number"
+                            value="{{ faction_id_value|default:'' }}"
+                            placeholder="e.g. 54815"
+                            required
+                        >
+                        <span class="field-hint">Torn faction numeric identifier</span>
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn btn-primary">▶ DEPLOY SURVEILLANCE</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="panel initiate-panel">
+            <div class="panel-header">
+                <div class="panel-title">Request Surveillance</div>
+            </div>
+            <div class="panel-body" style="display:flex; flex-direction:column; gap:12px;">
+                <p style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.7;">
+                    Standard operatives cannot deploy surveillance campaigns directly. Submit a target faction ID for administrator review.
+                </p>
+                <a href="{% url 'requests_list' %}" class="btn btn-primary" style="justify-content:center;">
+                    ▶ REQUEST SURVEILLANCE
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- SYSTEM STATUS -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">System Status</div>
+                <div class="pulse-dot" id="sidebar-pulse"></div>
+            </div>
+            <div class="panel-body">
+                <div class="sys-status-list">
+                    <div class="sys-row">
+                        <span class="sys-key">Collection Engine</span>
+                        <!-- steel blue: system-level status -->
+                        <span class="sys-val" style="color:var(--color-system);">ONLINE</span>
+                    </div>
+                    <div class="sys-row">
+                        <span class="sys-key">API Link</span>
+                        <span class="sys-val" style="color:var(--color-system);">CONNECTED</span>
+                    </div>
+                    <div class="sys-row">
+                        <span class="sys-key">Database</span>
+                        <span class="sys-val" style="color:var(--color-system);">NOMINAL</span>
+                    </div>
+                    <div class="sys-row">
+                        <span class="sys-key">Active Ops</span>
+                        <!-- green: active operational count -->
+                        <span class="sys-val" style="color:var(--color-active);">{{ active_count }}</span>
+                    </div>
+                    <div class="sys-row">
+                        <span class="sys-key">Session Time</span>
+                        <span class="sys-val" id="session-timer">00:00:00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Session timer
+    const sessionStart = Date.now();
+    function updateTimer() {
+        const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+        const h = Math.floor(elapsed / 3600);
+        const m = Math.floor((elapsed % 3600) / 60);
+        const s = elapsed % 60;
+        const z = n => String(n).padStart(2,'0');
+        const el = document.getElementById('session-timer');
+        if (el) el.textContent = `${z(h)}:${z(m)}:${z(s)}`;
+    }
+    setInterval(updateTimer, 1000);
+
+    // Metric count-up animation
+    function countUp(el, target, duration) {
+        const start = performance.now();
+        const from = 0;
+        function step(now) {
+            const progress = Math.min((now - start) / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(from + (target - from) * ease);
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.metric-value').forEach(el => {
+            const raw = parseInt(el.textContent.trim(), 10);
+            if (!isNaN(raw) && raw > 0) {
+                el.textContent = '0';
+                countUp(el, raw, 800);
+            }
+        });
+    });
+</script>
+{% endblock %}

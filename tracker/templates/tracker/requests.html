@@ -1,0 +1,167 @@
+{% extends "tracker/base.html" %}
+
+{% block title %}TriNetra // SURVEILLANCE REQUESTS{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ─── REQUESTS-SPECIFIC ─────────────────────────────────────── */
+    .requests-layout {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 16px;
+    }
+
+    .requests-header-row {
+        display: grid;
+        grid-template-columns: 1fr 140px 140px;
+        gap: 16px;
+        padding: 7px 14px;
+        border-bottom: 1px solid var(--border-dim);
+    }
+
+    .requests-row {
+        display: grid;
+        grid-template-columns: 1fr 140px 140px;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-dim);
+    }
+
+    @media (max-width: 1100px) {
+        .requests-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .requests-header-row {
+            display: none;
+        }
+        
+        .requests-row {
+            grid-template-columns: 1fr auto;
+            gap: 8px 10px;
+            padding: 10px 12px;
+        }
+        
+        .requests-row > div:first-child {
+            grid-column: 1 / -1;
+        }
+        
+        .requests-row > div:nth-child(2) {
+            text-align: left !important;
+        }
+    }
+    .no-accent-bar::before {
+        display: none !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- BREADCRUMB + PAGE HEADER -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-breadcrumb">
+            <a href="{% url 'home' %}" style="color:var(--text-muted);">INTEL OPS</a>
+            <span>//</span>
+            REQUESTS PORTAL
+        </div>
+        <div class="page-title">Surveillance Request Hub</div>
+        <div class="page-subtitle">Submit faction numerical IDs for admin approval and scheduling</div>
+    </div>
+</div>
+
+<div class="requests-layout">
+    <!-- LEFT: RECENT REQUESTS -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Your Requests</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+                {{ requests|length }} RECORD{% if requests|length != 1 %}S{% endif %}
+            </div>
+        </div>
+        
+        <!-- COLUMN HEADERS -->
+        <div class="requests-header-row">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;">Faction ID</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Date Submitted</div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-dim);text-transform:uppercase;text-align:right;">Status</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0;">
+            {% if requests %}
+                {% for r in requests %}
+                <div class="requests-row">
+                    <div>
+                        <div style="font-family:var(--font-mono); font-size:14px; font-weight:500;">FACTION ID: {{ r.faction_id|safe }}</div>
+                    </div>
+                    <div style="font-family:var(--font-mono); font-size:12px; color:var(--text-secondary); text-align:right;">
+                        {{ r.created_at|date:"Y-m-d H:i" }}
+                    </div>
+                    <div style="text-align:right;">
+                        {% if r.status == "PENDING" %}
+                            <span class="badge badge-warn">● PENDING</span>
+                        {% elif r.status == "APPROVED" %}
+                            <span class="badge badge-active">✔ APPROVED</span>
+                        {% else %}
+                            <span class="badge badge-danger">✖ REJECTED</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px; gap:12px;">
+                    <div style="width:40px; height:40px; border:1px solid var(--border-mid); border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:16px;">⊕</div>
+                    <p style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted); text-align:center;">No requests logged. Use the form to submit one.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- RIGHT: FORM PANEL -->
+    <div>
+        <div class="panel initiate-panel">
+            <div class="panel-header">
+                <div class="panel-title no-accent-bar" style="display: flex; align-items: center; gap: 8px;">
+                    <svg class="reticle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-intel); flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    Request Surveillance
+                </div>
+            </div>
+            <div class="panel-body" style="display:flex; flex-direction:column; gap:14px;">
+                {% if error %}
+                    <div class="alert alert-danger">
+                        <span class="alert-label">[ERR]</span>
+                        <span>{{ error }}</span>
+                    </div>
+                {% endif %}
+
+                <p style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); line-height:1.6; border-left:2px solid var(--border-active); padding-left:8px; margin-bottom:4px;">
+                    Submit a faction for intelligence review. All surveillance requests require administrator approval.
+                </p>
+
+                <form method="post" action="{% url 'create_request' %}">
+                    {% csrf_token %}
+                    <div class="field-group" style="margin-bottom:12px;">
+                        <label for="faction_id">Target Faction ID</label>
+                        <input
+                            id="faction_id"
+                            name="faction_id"
+                            type="text"
+                            placeholder="e.g. 54815"
+                            required
+                        >
+                        <span class="field-hint" style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-top:4px;">Faction numeric identifier for Torn</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
+                        ▶ SUBMIT FOR APPROVAL
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

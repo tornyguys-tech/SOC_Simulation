@@ -1,0 +1,4 @@
+logs/
+*.pid
+__pycache__/
+*.py[cod]
