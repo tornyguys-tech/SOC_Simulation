@@ -12,8 +12,6 @@ from django.views.decorators.csrf import csrf_exempt
 
 from tracker.models import SpyUser
 from security_monitoring.models import SecurityLabPayload, SecurityEvent, IOC, SecurityIncident
-from security_monitoring.services.detector import inspect_request, get_client_ip
-from security_monitoring.services.parser import process_security_telemetry
 from security_monitoring.services.response import take_action_contain, reset_security_lab, verify_active_rendering_state
 from security_monitoring.services.sigma import load_all_rules
 
@@ -64,61 +62,21 @@ def xss_demo(request):
 
     GET renders the page for every visitor.
     POST accepts field updates, target directives, and sector observations.
-    The detector inspects the request that Django actually receives (request.POST,
-    request.GET, body, headers, query string) across all parameters without relying
-    on a special field name. Suspicious input is detected automatically and stored
-    as an active server-side database record.
+    The middleware (ThreatLensInspectionMiddleware) inspects the actual Django request
+    automatically across all parameters without relying on any special field name.
+    Suspicious input is detected automatically and stored as an active server-side
+    database record via SecurityLabPayload.
     The submitted string is NEVER executed by this application; the visible effect is
     a server-side rendering indicator driven by the active database record.
     """
     endpoint = "/dispatch/"
     if request.method == "POST":
-        # Check if middleware already flagged and created incident
+        # Middleware already ran inspect_request() and created the incident if detected.
         is_detected = getattr(request, "threatlens_detected", False)
         incident = getattr(request, "threatlens_incident", None)
         payload_obj = getattr(request, "threatlens_payload", None)
 
-        if not is_detected:
-            # Inspect all incoming data dynamically across all parameters
-            detection = inspect_request(request)
-            if detection.get("detected"):
-                is_detected = True
-                extracted_payload = detection.get("extracted_payload", "")
-                source_ip = detection.get("source_ip", get_client_ip(request))
-                user_agent = detection.get("user_agent", request.META.get("HTTP_USER_AGENT", ""))
-
-                payload_obj = SecurityLabPayload.objects.create(
-                    payload=extracted_payload,
-                    label="Inbound Threat Detection",
-                    source_ip=source_ip,
-                    user_agent=user_agent,
-                    endpoint=endpoint,
-                    status="ACTIVE",
-                )
-
-                incident = process_security_telemetry(
-                    event_type="stored_xss_detected",
-                    source_ip=source_ip,
-                    method="POST",
-                    path=endpoint,
-                    user_agent=user_agent,
-                    payload_text=extracted_payload,
-                    payload_obj=payload_obj,
-                    query_string=detection.get("query_string", ""),
-                    request_headers=detection.get("headers", {}),
-                    request_body=detection.get("raw_body", ""),
-                    matched_signatures=detection.get("matched_signatures", []),
-                    payload_reference=str(payload_obj.id),
-                    extra_context={
-                        "request_source": "application_endpoint",
-                        "inspected_field": detection.get("inspected_field", ""),
-                        "matches": detection.get("matches", []),
-                        "rendering_record_id": payload_obj.id,
-                    },
-                )
-
         if is_detected and incident:
-            # Client requested JSON (API / automated tool)
             if request.headers.get("Accept", "").lower().find("application/json") >= 0 or request.GET.get("format") == "json":
                 return JsonResponse({
                     "status": "detected",
@@ -129,7 +87,7 @@ def xss_demo(request):
                 }, status=201)
             return redirect("xss_demo")
 
-        # Clean submission (normal business directive without malicious vectors)
+        # Clean submission — normal business directive with no malicious vectors
         if request.headers.get("Accept", "").lower().find("application/json") >= 0:
             return JsonResponse({
                 "status": "recorded",

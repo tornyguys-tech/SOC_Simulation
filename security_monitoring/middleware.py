@@ -14,12 +14,16 @@ class ThreatLensInspectionMiddleware:
     for malicious characteristics. Runs normalization before signature matching.
     Automatically creates telemetry, extracts/enriches IOCs, computes dynamic risk score,
     evaluates Sigma rules, and registers the security incident.
+
+    The incident is linked to the exact SurveillanceRequest created by the downstream view
+    via request.threatlens_incident — the view sets incident.surveillance_request directly
+    using the primary key of the newly created record.  No fuzzy payload search is used.
     """
 
     EXCLUDED_PREFIXES = (
         "/static/",
         "/admin/",
-        "/soc/incident/",  # Avoid re-inspecting administrative response actions
+        "/soc/",  # Avoid re-inspecting SOC administrative actions
     )
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
@@ -75,24 +79,12 @@ class ThreatLensInspectionMiddleware:
                 },
             )
 
-            # Attach detection details to request for downstream view usage
+            # Attach detection details to request for downstream view usage.
+            # The downstream view (e.g. create_request) must set
+            # incident.surveillance_request = <newly created SurveillanceRequest>
+            # using the exact object primary key — no fuzzy search.
             request.threatlens_detected = True
             request.threatlens_incident = incident
             request.threatlens_payload = payload_obj
 
-        response = self.get_response(request)
-
-        # Post-view check: if a surveillance request was created during this request, link it
-        if getattr(request, "threatlens_detected", False):
-            incident = getattr(request, "threatlens_incident", None)
-            if incident and not incident.surveillance_request_id:
-                from tracker.models import SurveillanceRequest
-                extracted_payload = detection.get("extracted_payload", "")
-                sr = SurveillanceRequest.objects.filter(
-                    faction_id=extracted_payload
-                ).order_by("-created_at").first()
-                if sr:
-                    incident.surveillance_request = sr
-                    incident.save(update_fields=["surveillance_request"])
-
-        return response
+        return self.get_response(request)

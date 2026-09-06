@@ -2,37 +2,25 @@ from django.utils import timezone
 from typing import Dict, Any, Optional, List
 
 from security_monitoring.models import SecurityIncident, SecurityLabPayload, SecurityEvent, IOC
-from security_monitoring.services.detector import evaluate_string_for_threats
 
 
 def get_active_malicious_surveillance_requests() -> List[Any]:
     """
-    Finds any SurveillanceRequest records that contain uncontained malicious payloads.
-    Legitimate surveillance requests have numeric faction IDs (e.g. 54815).
-    Malicious injections contain non-numeric script or event-handler vectors.
+    Returns SurveillanceRequest records that are still linked to open (non-contained)
+    SecurityIncidents. These are the exact records that were associated with a detected
+    incident via foreign key — no fuzzy payload pattern scanning.
     """
     from tracker.models import SurveillanceRequest
 
-    malicious = []
-    for sr in SurveillanceRequest.objects.all():
-        raw_val = sr.faction_id or ""
-        if raw_val.isdigit():
-            continue
-        threats = evaluate_string_for_threats(raw_val, field_name="faction_id")
-        lower_val = raw_val.lower()
-        if (
-            threats
-            or "<script" in lower_val
-            or "<img" in lower_val
-            or "<svg" in lower_val
-            or "<iframe" in lower_val
-            or "onerror=" in lower_val
-            or "onload=" in lower_val
-            or "javascript:" in lower_val
-            or "demo_video_payload" in lower_val
-        ):
-            malicious.append(sr)
-    return malicious
+    linked_ids = list(
+        SecurityIncident.objects.filter(
+            status__in=["OPEN", "INVESTIGATING"],
+            surveillance_request__isnull=False,
+        ).values_list("surveillance_request_id", flat=True)
+    )
+    if not linked_ids:
+        return []
+    return list(SurveillanceRequest.objects.filter(id__in=linked_ids))
 
 
 def verify_active_rendering_state() -> Dict[str, Any]:
@@ -80,11 +68,10 @@ def take_action_contain(incident_id: int, admin_user: Optional[Any] = None) -> D
     """
     Human-in-the-loop containment.
 
+    Deletes ONLY the exact SurveillanceRequest and SecurityLabPayload that are
+    directly associated with this incident via foreign key.
+    No fuzzy search or broad deletion of unrelated records.
     The incident keeps the captured payload as forensic evidence.
-    CRITICAL: The payload CANNOT be deactivated until the malicious record is deleted
-    from the database in both SecurityLabPayload AND SurveillanceRequest!
-    Deleting the request from SurveillanceRequest removes it from the admin portal
-    rendering path (admin_requests.html).
     """
     from tracker.models import SurveillanceRequest
 
@@ -118,56 +105,32 @@ def take_action_contain(incident_id: int, admin_user: Optional[Any] = None) -> D
         elif incident.surveillance_request:
             incident.payload = incident.surveillance_request.faction_id
 
-    # Disconnect foreign keys in memory BEFORE deleting rows to prevent SQLite foreign key IntegrityError
+    # Preserve the IDs before nulling the FK references in memory
     target_payload_id = incident.payload_record_id
     target_surveillance_id = incident.surveillance_request_id
 
+    # Store the SurveillanceRequest ID for the action_result message before we disconnect it
+    surveillance_record_label = (
+        f"SurveillanceRequest #{target_surveillance_id}"
+        if target_surveillance_id
+        else "None"
+    )
+
+    # Disconnect FK references in memory BEFORE deleting rows to prevent IntegrityError
     incident.payload_record = None
     incident.payload_record_id = None
     incident.surveillance_request = None
     incident.surveillance_request_id = None
 
-    # 1. Delete active SecurityLabPayload
+    # 1. Delete ONLY the exact SecurityLabPayload linked to this incident
     if target_payload_id:
         cnt, _ = SecurityLabPayload.objects.filter(id=target_payload_id).delete()
         deleted_payloads_count += cnt
-    else:
-        cnt, _ = SecurityLabPayload.objects.filter(
-            status="ACTIVE",
-            endpoint=incident.endpoint or "/dispatch/"
-        ).delete()
-        deleted_payloads_count += cnt
 
-    # 2. DELETE malicious request from database in SurveillanceRequest!
+    # 2. Delete ONLY the exact SurveillanceRequest linked to this incident
     if target_surveillance_id:
         cnt, _ = SurveillanceRequest.objects.filter(id=target_surveillance_id).delete()
         deleted_surveillance_count += cnt
-
-    # Delete any SurveillanceRequest matching the incident payload string
-    if incident.payload and incident.payload.strip():
-        payload_needle = incident.payload.strip()
-        cnt, _ = SurveillanceRequest.objects.filter(faction_id__icontains=payload_needle).delete()
-        deleted_surveillance_count += cnt
-        cnt, _ = SurveillanceRequest.objects.filter(faction_id=payload_needle).delete()
-        deleted_surveillance_count += cnt
-
-    # Clean any remaining non-numeric malicious surveillance requests with XSS patterns
-    for sr in list(SurveillanceRequest.objects.all()):
-        raw_val = sr.faction_id or ""
-        if not raw_val.isdigit():
-            threats = evaluate_string_for_threats(raw_val, field_name="faction_id")
-            lower_val = raw_val.lower()
-            if (
-                threats
-                or "<script" in lower_val
-                or "<img" in lower_val
-                or "<svg" in lower_val
-                or "onerror=" in lower_val
-                or "javascript:" in lower_val
-                or "demo_video_payload" in lower_val
-            ):
-                sr.delete()
-                deleted_surveillance_count += 1
 
     # Verify containment against updated database state
     rendering_state = verify_active_rendering_state()
@@ -183,11 +146,15 @@ def take_action_contain(incident_id: int, admin_user: Optional[Any] = None) -> D
     incident.action_taken_by = admin_user
     incident.containment_verified = verified
     incident.action_result = (
+        f"Action: Delete malicious request | "
+        f"Record: {surveillance_record_label} | "
+        f"Result: {'SUCCESS' if deleted_surveillance_count > 0 or deleted_payloads_count > 0 else 'NO_RECORD_FOUND'} | "
+        f"Verification: {containment_str} | "
         f"Payload active: {payload_active_str} | "
         f"Active rendering record: {record_status_str} | "
         f"Containment: {containment_str}. "
         f"Executed by {getattr(admin_user, 'player_name', 'ADMIN')} at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC. "
-        f"Deleted {deleted_payloads_count} active SecurityLabPayload(s) and {deleted_surveillance_count} malicious SurveillanceRequest(s) from database. Forensic evidence retained."
+        f"Deleted {deleted_payloads_count} SecurityLabPayload(s) and {deleted_surveillance_count} SurveillanceRequest(s) from database. Forensic evidence retained."
     )
     incident.save()
 
@@ -208,26 +175,27 @@ def take_action_contain(incident_id: int, admin_user: Optional[Any] = None) -> D
 def reset_security_lab() -> Dict[str, Any]:
     """
     Safely cleans up security telemetry and rendering records.
-    Cleans up any malicious test SurveillanceRequest containing attack payloads,
-    while STRICTLY preserving legitimate TornSpy records (real numeric faction IDs).
+    Deletes only SurveillanceRequests that are (or were) linked to security incidents.
+    Never touches legitimate TornSpy records that have no security incident association.
     """
     from tracker.models import SurveillanceRequest
+
+    # Collect all SurveillanceRequest IDs referenced by any incident before deletion
+    linked_sr_ids = list(
+        SecurityIncident.objects.filter(surveillance_request__isnull=False)
+        .values_list("surveillance_request_id", flat=True)
+    )
 
     incidents_deleted, _ = SecurityIncident.objects.all().delete()
     iocs_deleted, _ = IOC.objects.all().delete()
     events_deleted, _ = SecurityEvent.objects.all().delete()
     payloads_deleted, _ = SecurityLabPayload.objects.all().delete()
 
-    # Clean only non-numeric malicious injection requests; preserve legitimate numeric requests!
+    # Delete only SurveillanceRequests that were linked to incidents
     sr_deleted = 0
-    for sr in list(SurveillanceRequest.objects.all()):
-        raw_val = sr.faction_id or ""
-        if not raw_val.isdigit():
-            threats = evaluate_string_for_threats(raw_val, field_name="faction_id")
-            lower_val = raw_val.lower()
-            if threats or "<" in raw_val or "onerror=" in lower_val or "demo_video_payload" in lower_val:
-                sr.delete()
-                sr_deleted += 1
+    if linked_sr_ids:
+        cnt, _ = SurveillanceRequest.objects.filter(id__in=linked_sr_ids).delete()
+        sr_deleted = cnt
 
     return {
         "success": True,

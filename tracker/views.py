@@ -384,13 +384,14 @@ def create_request(request):
         faction_id=faction_id_raw,
         status="PENDING"
     )
-    
-    # Link to active ThreatLens incident if automatic detection triggered
+
+    # Link the exact SurveillanceRequest primary key to the ThreatLens incident.
+    # This uses the exact object — no fuzzy payload search.
     incident = getattr(request, "threatlens_incident", None)
-    if incident:
+    if incident and not incident.surveillance_request_id:
         incident.surveillance_request = req_obj
         incident.save(update_fields=["surveillance_request"])
-    
+
     return redirect("requests_list")
 
 
