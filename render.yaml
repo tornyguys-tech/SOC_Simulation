@@ -1,0 +1,47 @@
+# render.yaml — Render Blueprint for TornSpy / ThreatLens SOC Simulation
+#
+# This file defines the Render infrastructure as code.
+# SECRET values (SECRET_KEY, DATABASE_URL) must be set manually in the
+# Render dashboard — they are NOT stored here.
+#
+# Usage:
+#   Connect this repository to Render and create from Blueprint,
+#   or create the service manually using the values below.
+
+services:
+  - type: web
+    name: soc-simulation
+    runtime: python
+    repo: https://github.com/tornyguys-tech/SOC_Simulation
+    branch: master
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn tornspy.wsgi:application --bind 0.0.0.0:$PORT"
+    healthCheckPath: /health/
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: SECURITY_MONITORING_ENABLED
+        value: "True"
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      # SECRET_KEY — generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+      # Set this in the Render dashboard, NOT here.
+      - key: SECRET_KEY
+        generateValue: true
+      # ALLOWED_HOSTS — set to your actual Render service hostname
+      - key: ALLOWED_HOSTS
+        value: "YOUR-SERVICE.onrender.com"
+      # CSRF_TRUSTED_ORIGINS — set to your actual Render HTTPS origin
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://YOUR-SERVICE.onrender.com"
+      # DATABASE_URL — linked automatically from the database below
+      - key: DATABASE_URL
+        fromDatabase:
+          name: soc-simulation-db
+          property: connectionString
+
+databases:
+  - name: soc-simulation-db
+    databaseName: soc_simulation
+    user: soc_admin
+    plan: free

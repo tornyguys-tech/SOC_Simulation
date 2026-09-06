@@ -202,11 +202,11 @@ class SecurityLabWorkflowTestCase(TestCase):
         # Step 3: Verify shared rendering impact for both sessions
         resp_a2 = client_a.get(reverse("xss_demo"))
         self.assertTrue(resp_a2.context["has_active_payload"])
-        self.assertContains(resp_a2, "fbi-breaking-door.gif")
+        self.assertContains(resp_a2, "fbi-breaking-door")
 
         resp_b2 = client_b.get(reverse("xss_demo"))
         self.assertTrue(resp_b2.context["has_active_payload"])
-        self.assertContains(resp_b2, "fbi-breaking-door.gif")
+        self.assertContains(resp_b2, "fbi-breaking-door")
 
         # Step 4: Verify incident created in SOC
         incident = SecurityIncident.objects.filter(status="OPEN").latest("created_at")

@@ -1,4 +1,47 @@
-logs/
-*.pid
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+
+# Databases — never commit these
+*.sqlite3
+db.sqlite3
+
+# Environment / secrets — never commit
+.env
+.env.*
+*.env
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Static files collected by collectstatic — reproduced at build time
+staticfiles/
+
+# Media uploads (if any)
+media/
+
+# Test / coverage artefacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Editor artefacts
+.vscode/settings.json
+*.swp
+*.swo
+
+# Render / deployment logs
+logs/
+*.pid
+
+# NOTE: migrations/ are intentionally NOT ignored — they must be committed.
