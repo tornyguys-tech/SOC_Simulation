@@ -55,6 +55,13 @@ SECURITY_MONITORING_ENABLED = os.getenv(
     os.getenv("SECURITY_LAB_ENABLED", "True"),
 ).lower() in ("1", "true", "yes")
 
+# Trusted reverse-proxy hop count for client-IP resolution.
+# Set to 0 for direct (no proxy) deployments.
+# Set to 1 when deployed behind a single reverse proxy such as Render.
+# Higher values for multi-hop proxy chains.
+# Can be overridden via the TRUSTED_PROXY_COUNT environment variable.
+TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", "1"))
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from django.http import HttpRequest
 
 from security_monitoring.services.normalizer import normalize_for_inspection
+from security_monitoring.utils import get_client_ip  # noqa: F401 – re-exported for back-compat
 
 
 # Signature Rules Definition for Detection Engine
@@ -113,28 +114,6 @@ def evaluate_string_for_threats(raw_value: str, field_name: str = "") -> List[Di
             })
 
     return matches
-
-
-def get_client_ip(request: HttpRequest) -> str:
-    """Safely extracts client IP address from HttpRequest."""
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
-        raw_ip = x_forwarded_for.split(",")[0].strip()
-        try:
-            ipaddress.ip_address(raw_ip)
-            return raw_ip
-        except ValueError:
-            pass
-
-    remote_addr = request.META.get("REMOTE_ADDR")
-    if remote_addr:
-        try:
-            ipaddress.ip_address(remote_addr)
-            return remote_addr
-        except ValueError:
-            pass
-
-    return "127.0.0.1"
 
 
 def inspect_request(request: HttpRequest) -> Dict[str, Any]:
