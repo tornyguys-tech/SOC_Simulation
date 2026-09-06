@@ -36,6 +36,10 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Always allow Render's own domain so the service starts without manual config
+if not DEBUG:
+    ALLOWED_HOSTS.append(".onrender.com")
+
 # In development (DEBUG=True) add localhost automatically
 if DEBUG:
     ALLOWED_HOSTS = list(dict.fromkeys(
